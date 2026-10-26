@@ -18,3 +18,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["css2table"]
+
+[tool.pytest.ini_options]
+# Lets the tests import `tools` from the repository root.
+pythonpath = ["."]
