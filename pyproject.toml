@@ -1,0 +1,24 @@
+[project]
+name = "css2table"
+version = "0.1.0"
+description = "Converts the CSS layouts of modern web pages into HTML4 tables for legacy browsers"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["lxml", "tinycss2", "cssselect2"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+css2table = "css2table.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["css2table"]
+
+[tool.pytest.ini_options]
+# Lets the tests import `tools` from the repository root.
+pythonpath = ["."]

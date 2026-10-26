@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grid test page</title>
+<style>
+  :root {
+    --accent: #2563eb;
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --text: #1f2937;
+    --gap: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    color: var(--text);
+    background: var(--bg);
+  }
+  /* Mobile first: everything stacked */
+  .page { display: grid; gap: var(--gap); padding: var(--gap); }
+  @media (min-width: 720px) {
+    .page {
+      grid-template-columns: 220px 1fr;
+      grid-template-areas:
+        "head head"
+        "side main"
+        "foot foot";
+    }
+  }
+  header { grid-area: head; background: var(--accent); color: #fff; padding: 16px 24px; }
+  header h1 { margin: 0; font-size: 1.5rem; }
+  aside { grid-area: side; background: var(--card); padding: 16px; }
+  aside ul { list-style: none; padding: 0; margin: 0; }
+  aside a { color: var(--accent); text-decoration: none; }
+  main { grid-area: main; }
+  footer { grid-area: foot; text-align: center; color: #6b7280; font-size: 0.875rem; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+  .stat { background: var(--card); padding: 16px; text-align: center; }
+  .stat strong { display: block; font-size: 2rem; color: var(--accent); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--gap);
+    margin-top: var(--gap);
+  }
+  .card { background: var(--card); padding: 12px; border: 1px solid #e5e7eb; }
+  .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+  .card.wide { grid-column: span 2; background: #fef3c7; }
+
+  .gallery {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 8px;
+    margin-top: var(--gap);
+  }
+  .gallery div { background: #c7d2fe; padding: 24px; text-align: center; }
+  .gallery .big { grid-row: 1 / 3; background: #a5b4fc; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+  .cookie { position: fixed; bottom: 0; left: 0; right: 0; background: #000; color: #fff; }
+</style>
+<script>console.log("will be removed");</script>
+</head>
+<body>
+<div class="page">
+  <header><h1>Dashboard</h1><span class="sr-only">Screen readers only</span></header>
+  <aside>
+    <nav>
+      <ul>
+        <li><a href="/overview">Overview</a></li>
+        <li><a href="/reports">Reports</a></li>
+        <li><a href="/settings">Settings</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <main>
+    <section class="stats">
+      <div class="stat"><strong>128</strong>Visitors</div>
+      <div class="stat"><strong>42</strong>Orders</div>
+      <div class="stat"><strong>7</strong>Returns</div>
+    </section>
+    <section class="cards">
+      <article class="card wide"><h3>Notice</h3><p>This card spans two columns.</p></article>
+      <article class="card"><h3>Card 1</h3><p>Some text in the card.</p></article>
+      <article class="card"><h3>Card 2</h3><p>Even more text.</p></article>
+      <article class="card"><h3>Card 3</h3><p>And another one.</p></article>
+      <article class="card"><h3>Card 4</h3><p>The last card.</p></article>
+    </section>
+    <section class="gallery">
+      <div class="big">Large (2 rows)</div>
+      <div>A</div><div>B</div><div>C</div><div>D</div>
+    </section>
+  </main>
+  <footer>&copy; 2026 Example Inc.</footer>
+</div>
+<div class="cookie">We use cookies.</div>
+</body>
+</html>
