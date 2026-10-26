@@ -16,8 +16,8 @@ font size by itself.
 1. Parse the HTML with `lxml`.
 2. Read CSS from `<style>`, `<link>` and `@import` with `tinycss2`, match rules with
    `cssselect2` and resolve the cascade ourselves (specificity, `!important`,
-   inline styles, inheritance, `var()`, media queries for an assumed screen
-   width).
+   inline styles, inheritance, `var()`, `all`, `revert`, media queries for an
+   assumed screen width).
 3. Decide per element: flex and grid containers become tables; blocks with a
    background, padding or width become single-cell tables; everything else is
    kept (with an HTML4 tag where needed).
@@ -42,7 +42,9 @@ font size by itself.
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |
-| `display: none`, `position: fixed`, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
+| `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
+| `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
+| `display: none`, off-screen elements (skip links, off-canvas menus), bottom-anchored or full-screen `position: fixed` overlays, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
 
 ## Usage
 
@@ -88,5 +90,8 @@ python tools/testpages.py
 - `gap` becomes `cellspacing` and therefore also appears at the table edges.
 - Margins between blocks are ignored; `padding` is a single value per box.
 - `position: absolute`, `transform`, floats of blocks (except as `align`) and
-  pseudo-elements (`::before`) are not reproduced.
+  pseudo-elements (`::before`) are not reproduced. Whether a positioned element
+  is off-screen is a heuristic (large negative offsets, `translate(±100%)`,
+  `clip`, `opacity: 0`).
+- Dropdown menus that are hidden only via `:hover` or JavaScript remain visible.
 - A `max-width` smaller than the screen width becomes a fixed pixel width.

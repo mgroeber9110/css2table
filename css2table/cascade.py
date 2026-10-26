@@ -154,6 +154,9 @@ def expand(name, value):
             p.append('auto')
         return [('grid-row-start', p[0]), ('grid-column-start', p[1]),
                 ('grid-row-end', p[2]), ('grid-column-end', p[3])]
+    if name == 'inset':
+        sides = _four(value)
+        return list(zip(('top', 'right', 'bottom', 'left'), sides)) if sides else []
     if name == 'place-items':
         p = parts(value)
         return [('align-items', p[0])] if p else []
@@ -302,12 +305,29 @@ class StyleResolver:
         style.custom = custom
 
         declared = {}
-        for _, name, value in candidates:
+        user_agent = {}  # declarations from the UA stylesheet, for `revert`
+        for (_, origin, *_), name, value in candidates:
             if name.startswith('--'):
                 continue
             value = substitute(value, custom)
+            keyword = value.lower()
+            if name == 'all':
+                # Reset everything declared so far (CSS resets often use `all: unset`)
+                if keyword in ('revert', 'revert-layer'):
+                    declared = dict(user_agent)
+                elif keyword in ('initial', 'unset', 'inherit'):
+                    declared = {}
+                continue
             for longhand, v in expand(name, value):
+                if v.lower() in ('revert', 'revert-layer'):
+                    if longhand in user_agent:
+                        declared[longhand] = user_agent[longhand]
+                    else:
+                        declared.pop(longhand, None)
+                    continue
                 declared[longhand] = v
+                if origin == 0:
+                    user_agent[longhand] = v
 
         parent_size = parent.font_size if parent is not None else 16.0
         for name in INHERITED:

@@ -197,14 +197,30 @@ class Converter:
         if s['display'] == 'none' or s['visibility'] in ('hidden', 'collapse'):
             return False
         position = s['position']
-        if position == 'fixed':
+        if position in ('absolute', 'fixed') and (self.offscreen(s) or s['opacity'] == '0'):
             return False
-        if position == 'absolute':
-            # typical "screen reader only" elements
-            w, h = px(s['width'], s.font_size), px(s['height'], s.font_size)
-            if (w is not None and w <= 1) or (h is not None and h <= 1):
-                return False
+        if position == 'fixed' and (s['top'] in (None, 'auto') or s['bottom'] not in (None, 'auto')):
+            # Overlays anchored to the bottom or covering the screen: cookie
+            # banners, "back to top" buttons, modal dialogs
+            return False
+        # Anything else that is fixed (typically a header at the top) and
+        # absolutely positioned stays in the normal flow.
         return True
+
+    def offscreen(self, s):
+        """Is a positioned element moved out of view (skip links, screen reader text, menus)?"""
+        fs = s.font_size
+        w, h = px(s['width'], fs), px(s['height'], fs)
+        if (w is not None and w <= 1) or (h is not None and h <= 1):
+            return True
+        for side, size in (('top', h), ('left', w), ('right', w)):
+            offset = px(s[side], fs)
+            # far outside, or moved out by at least its own size (off-canvas menus)
+            if offset is not None and (offset <= -999 or (size and offset <= -size)):
+                return True
+        if re.search(r'translate[xy]?\(\s*-?100%', (s['transform'] or '').lower()):
+            return True
+        return 'rect(0' in (s['clip'] or '').replace(' ', '') or 'inset(50%' in (s['clip-path'] or '')
 
     def emit_children(self, el, out, avail, ctx, pre=False):
         self.add_source_text(out, el.text, pre)
@@ -536,18 +552,22 @@ class Converter:
 
     def flex_lines(self, items, avail, gap):
         """Distribute flex-wrap items over lines based on their estimated widths."""
-        widths = []
+        sizes = []
         for item in items:
             size = self.flex_basis(item.style)[0] if item.el is not None else None
             if size is None:
                 return [items]  # width unknown: everything on one line
-            widths.append(size[1] if size[0] == 'px' else size[1] * avail / 100)
+            sizes.append(size)
         lines, used = [[]], 0
-        for item, w in zip(items, widths):
-            if lines[-1] and used + gap + w > avail + 0.5:
+        for item, (kind, n) in zip(items, sizes):
+            # Percentage widths usually already leave room for the gap,
+            # e.g. calc(50% - 1rem), so the gap only counts for pixel widths
+            w = n if kind == 'px' else n * avail / 100
+            spacing = gap if kind == 'px' and lines[-1] else 0
+            if lines[-1] and used + spacing + w > avail + 0.5:
                 lines.append([])
-                used = 0
-            used += (gap if lines[-1] else 0) + w
+                used, spacing = 0, 0
+            used += spacing + w
             lines[-1].append(item)
         return lines
 
@@ -583,7 +603,7 @@ class Converter:
 
         justify = s['justify-content'] or 'normal'
         n = len(cells)
-        if flexible or table.get('width') is None:
+        if flexible or table.get('width') is None or used_pct >= 99:
             pattern = [False] * n  # no free space to distribute
         elif justify == 'center':
             pattern = [True] + [False] * n + [True]

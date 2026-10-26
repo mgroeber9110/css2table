@@ -3,7 +3,7 @@ import pytest
 
 from css2table import convert
 from css2table.cascade import StyleResolver
-from css2table.values import color, font_face, media_matches
+from css2table.values import color, font_face, length, media_matches
 
 
 def page(css, body):
@@ -66,6 +66,40 @@ def test_media_queries():
     assert r.style(doc.find('.//p'))['color'] == 'red'
 
 
+def test_revert_and_all():
+    doc, r = styles('*:where(:not(html)) { all: unset; display: revert } h1 { font-size: 30px }',
+                    '<div><h1>t</h1><span>u</span></div>')
+    div, h1, span = doc.find('.//div'), doc.find('.//h1'), doc.find('.//span')
+    assert r.style(div)['display'] == 'block'
+    assert r.style(span)['display'] == 'inline'
+    assert r.style(h1)['display'] == 'block'
+    assert r.style(h1).font_size == 30
+    assert r.style(h1)['font-weight'] == 'normal'  # reset by `all: unset`
+
+
+@pytest.mark.parametrize('value, expected', [
+    ('calc(50% - 1.44rem/2)', ('%', 50.0)),
+    ('calc((100% - 20px) / 4)', ('%', 25.0)),
+    ('calc(100px + 2em)', ('px', 132.0)),
+    ('calc(2 * 10px)', ('px', 20.0)),
+    ('min(300px, 600px)', ('px', 300.0)),
+    ('min(100%, 600px)', ('%', 100.0)),
+    ('clamp(10px, 50px, 30px)', ('px', 30.0)),
+    ('calc(10px +)', None),
+])
+def test_math_functions(value, expected):
+    assert length(value) == expected
+
+
+def test_flex_wrap_with_calc_widths():
+    teasers = ''.join(f'<div class="t">{i}</div>' for i in range(4))
+    doc = parse(page('.f { display: flex; flex-wrap: wrap; gap: 1.44rem } .t { width: calc(50% - 1.44rem/2) }',
+                     f'<div class="f">{teasers}</div>'))
+    lines = doc.find('.//table').findall('tr/td/table')
+    assert [len(line.findall('tr/td')) for line in lines] == [2, 2]
+    assert lines[0].find('tr/td').get('width') == '50%'
+
+
 def test_values():
     assert color('rgb(255, 0, 0)') == '#ff0000'
     assert color('rgba(0, 0, 0, 0.5)') == '#808080'
@@ -86,10 +120,30 @@ def test_output_is_html4_without_scripts_and_classes():
 
 
 def test_hidden_and_fixed_elements_are_dropped():
-    out = convert(page('.cookie { position: fixed } .no { display: none }',
+    out = convert(page('.cookie { position: fixed; bottom: 0 } .no { display: none }',
                        '<div class="cookie">Cookie</div><p class="no">gone</p><p hidden>also</p><p>here</p>'))
     assert 'Cookie' not in out and 'gone' not in out and 'also' not in out
     assert 'here' in out
+
+
+def test_fixed_header_stays_in_flow():
+    out = convert(page('header { position: fixed; top: 0; width: 100% } .top { position: fixed; bottom: 2rem }'
+                       ' .modal { position: fixed; inset: 0 }',
+                       '<header>Logo</header><a class="top" href="#">Up</a><div class="modal">Dialog</div><p>Text</p>'))
+    assert 'Logo' in out and 'Text' in out
+    assert 'Up' not in out and 'Dialog' not in out
+
+
+def test_offscreen_elements_are_dropped():
+    css = ('.skip { position: absolute; left: -10000px } .menu { position: fixed; top: 0; left: -300px; width: 300px }'
+           ' .slide { position: absolute; transform: translate(100%) } .sr { position: absolute; clip: rect(0 0 0 0) }'
+           ' .fade { position: absolute; opacity: 0 }')
+    body = ('<a class="skip" href="#c">Skip</a><div class="menu">Menu</div><div class="slide">Slide</div>'
+            '<span class="sr">Hidden</span><span class="fade">Faded</span><p id="c">Content</p>')
+    out = convert(page(css, body))
+    for gone in ('Skip', 'Menu', 'Slide', 'Hidden', 'Faded'):
+        assert gone not in out
+    assert 'Content' in out
 
 
 def test_colors_become_attributes_and_font_tags():
