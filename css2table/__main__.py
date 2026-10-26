@@ -1,4 +1,4 @@
-"""Kommandozeile: python -m css2table eingabe.html [-o ausgabe.html]"""
+"""Command line: python -m css2table input.html [-o output.html]"""
 
 import argparse
 import os
@@ -9,10 +9,10 @@ from .convert import convert
 
 
 def file_loader(base_dir):
-    """Lädt verlinkte Stylesheets aus dem lokalen Dateisystem."""
+    """Load linked stylesheets from the local file system."""
     def load(href):
         if urlparse(href).scheme in ('http', 'https'):
-            return None  # Netzwerkzugriff gehört in den späteren Proxy
+            return None  # network access belongs in the later proxy
         path = href if os.path.isabs(href) else os.path.join(base_dir, href)
         try:
             with open(path, encoding='utf-8', errors='replace') as f:
@@ -24,13 +24,13 @@ def file_loader(base_dir):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='css2table', description=__doc__)
-    parser.add_argument('input', help='HTML-Datei (- für stdin)')
-    parser.add_argument('-o', '--output', help='Ausgabedatei (Standard: stdout)')
+    parser.add_argument('input', help='HTML file (- for stdin)')
+    parser.add_argument('-o', '--output', help='output file (default: stdout)')
     parser.add_argument('-w', '--width', type=int, default=800,
-                        help='angenommene Bildschirmbreite in px (Standard: 800)')
-    parser.add_argument('--base-url', help='Basis-URL für relative Links und Bilder')
+                        help='assumed screen width in px (default: 800)')
+    parser.add_argument('--base-url', help='base URL for relative links and images')
     parser.add_argument('--encoding', default='utf-8',
-                        help='Zeichensatz der Ausgabe, z. B. iso-8859-1 (Standard: utf-8)')
+                        help='output character set, e.g. iso-8859-1 (default: utf-8)')
     args = parser.parse_args(argv)
 
     if args.input == '-':

@@ -19,7 +19,7 @@ def styles(css, body, width=800):
     return doc, StyleResolver(doc, width)
 
 
-# -- Kaskade ------------------------------------------------------------------
+# -- Cascade ------------------------------------------------------------------
 
 def test_specificity_and_order():
     doc, r = styles('#x { color: red } p.a { color: blue } p { color: green }',
@@ -73,7 +73,7 @@ def test_values():
     assert font_face('Inter, system-ui, sans-serif') == 'Inter, Arial, Helvetica, sans-serif'
 
 
-# -- Ausgabe allgemein ----------------------------------------------------------
+# -- General output -------------------------------------------------------------
 
 def test_output_is_html4_without_scripts_and_classes():
     html = page('.x { color: red }',
@@ -87,9 +87,9 @@ def test_output_is_html4_without_scripts_and_classes():
 
 def test_hidden_and_fixed_elements_are_dropped():
     out = convert(page('.cookie { position: fixed } .no { display: none }',
-                       '<div class="cookie">Cookie</div><p class="no">weg</p><p hidden>auch</p><p>da</p>'))
-    assert 'Cookie' not in out and 'weg' not in out and 'auch' not in out
-    assert 'da' in out
+                       '<div class="cookie">Cookie</div><p class="no">gone</p><p hidden>also</p><p>here</p>'))
+    assert 'Cookie' not in out and 'gone' not in out and 'also' not in out
+    assert 'here' in out
 
 
 def test_colors_become_attributes_and_font_tags():
@@ -112,7 +112,7 @@ def test_centered_max_width_container():
     table = doc.find('.//table')
     assert table.get('width') == '600'
     assert table.get('align') == 'center'
-    # breiter als der Bildschirm: volle Breite statt fester Pixel
+    # wider than the screen: full width instead of fixed pixels
     doc = parse(page('.c { max-width: 1200px; margin: 0 auto; background: #fff }', '<div class="c">x</div>'))
     assert doc.find('.//table').get('width') == '100%'
 
@@ -140,7 +140,7 @@ def test_flex_sidebar_fixed_and_growing():
 
 def test_flex_space_between_uses_spacer():
     doc = parse(page('.f { display: flex; justify-content: space-between; align-items: center }',
-                     '<div class="f"><a href="/">Logo</a><a href="/x">Menü</a></div>'))
+                     '<div class="f"><a href="/">Logo</a><a href="/x">Menu</a></div>'))
     cells = doc.findall('.//table/tr/td')
     assert len(cells) == 3
     assert cells[1].get('width') == '100%' and len(cells[1]) == 0
@@ -182,7 +182,7 @@ def test_grid_fr_columns_to_percent():
     rows = doc.find('.//table').findall('tr')
     assert len(rows) == 2
     assert [td.get('width') for td in rows[0]] == ['25%', '50%', '25%']
-    assert len(rows[1]) == 3  # eine Zelle mit Inhalt, zwei leere
+    assert len(rows[1]) == 3  # one cell with content, two empty
 
 
 def test_grid_span_becomes_colspan_and_rowspan():

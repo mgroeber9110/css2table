@@ -1,1 +1,1 @@
-# Liegt im Wurzelverzeichnis, damit pytest `tools` importieren kann.
+# Lives in the root directory so pytest can import `tools`.

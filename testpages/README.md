@@ -1,27 +1,27 @@
-# Testseiten
+# Test pages
 
-Gespeicherte Fassungen echter Webseiten (nur HTML und CSS), mit denen der
-Konverter geprüft wird. Jede Seite liegt in einem eigenen Unterordner, so wie
-der Browser sie mit "Seite speichern unter" ablegt:
+Saved copies of real web pages (HTML and CSS only) used to check the
+converter. Each page lives in its own subfolder, as the browser stores it with
+"Save page as":
 
     testpages/tagesschau/tagesschau.de.html
     testpages/tagesschau/tagesschau.de_files/main-….css
 
-Die Seiten selbst sind urheberrechtlich geschützt und werden deshalb nicht
-eingecheckt (siehe `.gitignore`). Nur diese Datei liegt im Repo.
+The pages themselves are protected by copyright and are therefore not checked
+in (see `.gitignore`). Only this file is in the repository.
 
 ```sh
-python tools/testpages.py      # alle Seiten umwandeln, Ausgabe in testpages/out/
+python tools/testpages.py      # convert all pages, output in testpages/out/
 python -m pytest tests/test_testpages.py
 ```
 
-`tools/testpages.py` zeigt je Seite Laufzeit, Größe, Zahl der Tabellen und die
-**Text-Abdeckung**: welcher Anteil der Wörter, die im Original laut CSS sichtbar
-sind, in der umgewandelten Seite noch vorkommt.
+For each page, `tools/testpages.py` shows the run time, size, number of tables
+and the **text coverage**: the share of the words that the CSS makes visible in
+the original which still appear in the converted page.
 
-## Sammlung
+## Collection
 
-| Ordner | Quelle | Gespeichert | Typ |
+| Folder | Source | Saved | Type |
 | --- | --- | --- | --- |
-| `tagesschau/` | Artikelseite auf tagesschau.de | 26.10.2026 | Artikel mit fixiertem Header, Flexbox |
-| `ndr/` | Startseite NDR.de | 26.10.2026 | Teaser-Raster mit Flexbox und Grid |
+| `tagesschau/` | Article page on tagesschau.de | 2026-10-26 | Article with fixed header, flexbox |
+| `ndr/` | NDR.de home page | 2026-10-26 | Teaser grid with flexbox and grid |

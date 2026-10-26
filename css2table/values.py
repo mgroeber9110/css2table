@@ -1,4 +1,4 @@
-"""Hilfsfunktionen zum Lesen einzelner CSS-Werte."""
+"""Helpers for reading individual CSS values."""
 
 import re
 
@@ -11,7 +11,7 @@ ABS_UNITS = {'px': 1.0, 'pt': 4 / 3, 'pc': 16.0, 'in': 96.0,
 FONT_KEYWORDS = {'xx-small': 9, 'x-small': 10, 'small': 13, 'medium': 16,
                  'large': 18, 'x-large': 24, 'xx-large': 32, 'xxx-large': 48}
 
-# Pixelgrößen der HTML-Schriftgrößen <font size=1..7>
+# Pixel sizes of the HTML font sizes <font size=1..7>
 HTML_FONT_SIZES = [10, 13, 16, 18, 24, 32, 48]
 
 GENERIC_FONTS = {
@@ -21,19 +21,19 @@ GENERIC_FONTS = {
     'cursive': ['Comic Sans MS', 'cursive'],
     'fantasy': ['Impact', 'fantasy'],
 }
-# Moderne Systemschrift-Namen, die ein alter Browser nicht kennt
+# Modern system font names that a legacy browser does not know
 SYSTEM_FONTS = {'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont'}
 
 
 def tokens(value):
-    """Komponentenwerte ohne Leerraum und Kommentare."""
+    """Component values without whitespace and comments."""
     if isinstance(value, str):
         value = tinycss2.parse_component_value_list(value)
     return [t for t in value if t.type not in ('whitespace', 'comment')]
 
 
 def parts(value):
-    """Wert an Leerraum auf oberster Ebene zerlegen, z. B. '0 auto' -> ['0', 'auto']."""
+    """Split a value at top-level whitespace, e.g. '0 auto' -> ['0', 'auto']."""
     return [tinycss2.serialize([t]).strip() for t in tokens(value)]
 
 
@@ -48,7 +48,7 @@ def split_commas(toks):
 
 
 def length(value, font_size=16.0):
-    """Länge lesen: ('px', n), ('%', n) oder None (auto, calc(), unbekannt)."""
+    """Read a length: ('px', n), ('%', n) or None (auto, calc(), unknown)."""
     if value is None:
         return None
     toks = tokens(value) if isinstance(value, str) else [value]
@@ -70,13 +70,13 @@ def length(value, font_size=16.0):
         if unit in ('ex', 'ch'):
             return ('px', t.value * font_size / 2)
         if unit in ('vw', 'vi'):
-            # Ohne berechnetes Layout ist 1vw etwa 1 % der Breite
+            # Without a computed layout, 1vw is roughly 1% of the width
             return ('%', float(t.value))
     return None
 
 
 def px(value, font_size=16.0, ref=None):
-    """Länge in Pixel; Prozent nur, wenn eine Bezugsbreite bekannt ist."""
+    """Length in pixels; percentages only when a reference width is known."""
     result = length(value, font_size)
     if result is None:
         return None
@@ -87,7 +87,7 @@ def px(value, font_size=16.0, ref=None):
 
 
 def font_size(value, parent):
-    """Berechnete Schriftgröße in Pixel."""
+    """Computed font size in pixels."""
     v = (value or '').strip().lower()
     if v in FONT_KEYWORDS:
         return float(FONT_KEYWORDS[v])
@@ -103,7 +103,7 @@ def font_size(value, parent):
 
 
 def color(value):
-    """CSS-Farbe als '#rrggbb'; Transparenz wird mit Weiß gemischt."""
+    """CSS color as '#rrggbb'; transparency is blended with white."""
     if value is None or value == '':
         return None
     try:
@@ -121,7 +121,7 @@ def color(value):
 
 
 def first_color(value):
-    """Erste Farbe in einem background-Wert, auch innerhalb eines Verlaufs."""
+    """First color in a background value, including inside a gradient."""
     for t in tokens(value):
         if t.type == 'function' and 'gradient' in t.lower_name:
             for arg in tokens(t.arguments):
@@ -136,7 +136,7 @@ def first_color(value):
 
 
 def font_face(family):
-    """CSS font-family in eine Liste für <font face> übersetzen."""
+    """Translate a CSS font-family into a list for <font face>."""
     names = []
     for part in (family or '').split(','):
         name = part.strip().strip('"\'')
@@ -159,7 +159,7 @@ def font_face(family):
 
 
 def html_font_size(size_px):
-    """Pixelgröße auf <font size=1..7> abbilden."""
+    """Map a pixel size onto <font size=1..7>."""
     return 1 + min(range(7), key=lambda i: abs(HTML_FONT_SIZES[i] - size_px))
 
 
@@ -167,7 +167,7 @@ _RANGE_RE = re.compile(r'^\(\s*width\s*(>=|<=|>|<)\s*([^)]+)\)$')
 
 
 def media_matches(query_list, width):
-    """Media Query für einen Bildschirm der Breite `width` auswerten."""
+    """Evaluate a media query for a screen of width `width`."""
     query_list = (query_list or '').strip().lower()
     if not query_list:
         return True

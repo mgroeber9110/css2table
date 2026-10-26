@@ -1,9 +1,8 @@
-"""Moderne HTML/CSS-Seiten in HTML4 mit Tabellen-Layout umwandeln.
+"""Convert modern HTML/CSS pages into HTML4 with a table layout.
 
-Es wird kein Layout berechnet. Stattdessen werden die geometrischen
-Vorgaben des CSS (Flexbox, Grid, Breiten, Abstände) in Tabellen-Attribute
-übersetzt, damit der alte Browser die Seite selbst an Fenstergröße und
-Schrift anpasst.
+No layout is computed. Instead, the geometric constraints of the CSS
+(flexbox, grid, widths, gaps) are translated into table attributes, so the
+legacy browser adapts the page to the window size and fonts by itself.
 """
 
 import re
@@ -32,11 +31,11 @@ RENAME = {'header': 'div', 'footer': 'div', 'nav': 'div', 'main': 'div',
           'section': 'div', 'article': 'div', 'aside': 'div', 'figure': 'div',
           'figcaption': 'div', 'hgroup': 'div', 'details': 'div', 'summary': 'div',
           'mark': 'span', 'time': 'span', 'data': 'span', 'output': 'span'}
-# Elemente ohne HTML4-Gegenstück, die samt Inhalt entfallen
+# Elements without an HTML4 equivalent; dropped together with their content
 DROP = {'script', 'style', 'link', 'meta', 'iframe', 'object', 'embed', 'video',
         'audio', 'canvas', 'svg', 'math', 'template', 'source', 'track', 'base',
         'dialog', 'head', 'title', 'frame', 'frameset', 'portal'}
-# Elemente, deren Inhalt ohne das Element selbst übernommen wird
+# Elements whose content is kept without the element itself
 TRANSPARENT = {'picture', 'noscript', 'slot'}
 VOID = {'br', 'hr', 'img', 'input', 'col', 'area'}
 INLINE_TAGS = {'a', 'abbr', 'acronym', 'b', 'big', 'button', 'cite', 'code', 'del',
@@ -44,7 +43,7 @@ INLINE_TAGS = {'a', 'abbr', 'acronym', 'b', 'big', 'button', 'cite', 'code', 'de
                's', 'samp', 'select', 'small', 'strike', 'strong', 'sub', 'sup',
                'textarea', 'tt', 'u', 'var'}
 
-# Container, deren Inhalt direkt in eine Tabellenzelle wandern kann
+# Containers whose content can move directly into a table cell
 BOX_MERGE = {'div', 'section', 'article', 'header', 'footer', 'nav', 'main',
              'aside', 'figure', 'hgroup', 'span'}
 CELL_MERGE = BOX_MERGE | {'li'}
@@ -52,7 +51,7 @@ CELL_MERGE = BOX_MERGE | {'li'}
 ALIGN_TAGS = {'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'th'}
 BOLD_TAGS = {'b', 'strong', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'th'}
 ITALIC_TAGS = {'i', 'em', 'cite', 'var', 'dfn', 'address'}
-# In diese Elemente darf kein <font> eingefügt werden
+# No <font> may be inserted into these elements
 NO_FONT = {'table', 'tr', 'tbody', 'thead', 'tfoot', 'ul', 'ol', 'dl', 'select',
            'textarea', 'optgroup', 'option', 'colgroup', 'html'} | VOID
 NO_TEXT = {'table', 'tr', 'tbody', 'thead', 'tfoot', 'ul', 'ol', 'dl', 'select'}
@@ -86,12 +85,12 @@ LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid'}
 VALIGN = {'center': 'middle', 'flex-end': 'bottom', 'end': 'bottom',
           'self-end': 'bottom', 'baseline': 'baseline'}
 
-# Text kürzer als das gilt als "Beschriftung" und wird nicht umbrochen
+# Text shorter than this counts as a "label" and is not wrapped
 SHORT_TEXT = 40
 
 
 def text_ctx(s):
-    """Die für alte Browser relevanten Schrift-Eigenschaften eines Stils."""
+    """The font properties of a style that matter to legacy browsers."""
     align = (s['text-align'] or 'left').lower()
     align = {'start': 'left', 'end': 'right', '-webkit-center': 'center'}.get(align, align)
     weight = (s['font-weight'] or 'normal').lower()
@@ -110,7 +109,7 @@ DEFAULT_CTX = text_ctx(Style())
 
 @dataclass
 class Item:
-    """Kind eines Flex- oder Grid-Containers (Element oder loser Text)."""
+    """Child of a flex or grid container (an element or loose text)."""
     el: object
     style: Style
     text: str = ''
@@ -156,7 +155,7 @@ class Converter:
     def style(self, el):
         return self.styles.style(el)
 
-    # -- Dokument -----------------------------------------------------------
+    # -- Document -----------------------------------------------------------
 
     def build(self):
         html = make('html')
@@ -190,7 +189,7 @@ class Converter:
             self.emit_children(src, inner, avail, ctx)
         return html
 
-    # -- Elemente -----------------------------------------------------------
+    # -- Elements -----------------------------------------------------------
 
     def visible(self, el, s):
         if not isinstance(el.tag, str) or el.tag in DROP:
@@ -201,7 +200,7 @@ class Converter:
         if position == 'fixed':
             return False
         if position == 'absolute':
-            # typische "nur für Screenreader"-Elemente
+            # typical "screen reader only" elements
             w, h = px(s['width'], s.font_size), px(s['height'], s.font_size)
             if (w is not None and w <= 1) or (h is not None and h <= 1):
                 return False
@@ -243,7 +242,7 @@ class Converter:
         if tag == 'span' and s['display'] in BLOCK_DISPLAYS:
             return 'div'
         if tag in ('ul', 'ol', 'li') and s['list-style-type'] == 'none':
-            return 'div'  # Liste ohne Aufzählungszeichen
+            return 'div'  # list without bullets
         if tag in HTML4_TAGS:
             return tag
         return 'div' if s['display'] in BLOCK_DISPLAYS else 'span'
@@ -263,7 +262,7 @@ class Converter:
             node.set('type', 'text')
 
     def plain(self, el, s, avail, ctx):
-        """Element mit gleichem (oder HTML4-ähnlichem) Tag übernehmen."""
+        """Keep the element with the same (or a similar HTML4) tag."""
         tag = self.out_tag(el, s)
         node = make(tag)
         self.copy_attrs(el, node)
@@ -285,7 +284,7 @@ class Converter:
             node.set('cellspacing', '0')
         old = DEFAULT_CTX if tag in ('td', 'th') else ctx
         if tag == 'a' and el.get('href'):
-            # Links haben im alten Browser eine eigene Farbe: immer explizit setzen
+            # Legacy browsers give links their own color: always set it explicitly
             old = dict(old, color=None)
         inner, ctx = self.apply_text(node, text_ctx(s), old, extra)
         if tag not in VOID:
@@ -298,9 +297,9 @@ class Converter:
         return node
 
     def apply_text(self, node, new, old, extra=None):
-        """Schrift-Unterschiede zu `old` als style-Attribut und <font> ausdrücken.
+        """Express font differences from `old` as a style attribute and <font>.
 
-        Liefert das Element, in das der Inhalt gehört, und den neuen Kontext.
+        Returns the element the content belongs in, and the new context.
         """
         tag = node.tag
         css = []
@@ -344,7 +343,7 @@ class Converter:
             result[key] = new[key]
         return inner, result
 
-    # -- Boxen: Hintergrund, Innenabstand, Rahmen, Breite ----------------------
+    # -- Boxes: background, padding, border, width ------------------------------
 
     def padding(self, s, avail):
         values = [px(s['padding-' + side], s.font_size, avail) or 0
@@ -366,7 +365,7 @@ class Converter:
                     or s['float'] in ('left', 'right'))
 
     def box_width(self, s, avail, shrink=False):
-        """Breite und Ausrichtung einer Tabelle; dazu die geschätzte Pixelbreite."""
+        """Width and alignment of a table, plus the estimated width in pixels."""
         fs = s.font_size
         width, max_width = length(s['width'], fs), length(s['max-width'], fs)
         attr, est = None, avail
@@ -378,7 +377,7 @@ class Converter:
             if kind == '%':
                 attr, est = pct(n), avail * n / 100
             elif n >= min(avail, self.viewport):
-                attr = '100%'  # max-width größer als der Bildschirm: einfach volle Breite
+                attr = '100%'  # max-width wider than the screen: just use the full width
             else:
                 attr, est = str(round(n)), n
         elif not shrink and s['float'] not in ('left', 'right') and s['display'] not in (
@@ -408,7 +407,7 @@ class Converter:
         return table, td, est - 2 * (pad + border)
 
     def box(self, el, s, avail, ctx, shrink=False):
-        """Block mit Hintergrund/Innenabstand/Breite als einzellige Tabelle."""
+        """Block with background/padding/width as a single-cell table."""
         table, td, inner_avail = self.box_table(s, avail, shrink)
         if el.tag in BOX_MERGE:
             holder, cctx = self.apply_text(td, text_ctx(s), DEFAULT_CTX)
@@ -418,7 +417,7 @@ class Converter:
             self.emit(el, holder, inner_avail, cctx, boxed=True)
         return table
 
-    # -- Flexbox und Grid ---------------------------------------------------
+    # -- Flexbox and grid --------------------------------------------------
 
     def layout(self, el, s, avail, shrink=False):
         if s['display'] in ('grid', 'inline-grid'):
@@ -426,7 +425,7 @@ class Converter:
         return self.flex(el, s, avail, shrink)
 
     def frame(self, s, avail, shrink):
-        """Tabelle für einen Layout-Container; bei Innenabstand verschachtelt."""
+        """Table for a layout container; nested when it has padding."""
         if self.padding(s, avail) or self.border(s):
             outer, td, inner = self.box_table(s, avail, shrink)
             table = sub(td, 'table', cellspacing=0, cellpadding=0, border=0)
@@ -464,7 +463,7 @@ class Converter:
         return round(px(s[prop], s.font_size, avail) or 0)
 
     def fill_cell(self, td, item, container, avail, shrink=False):
-        """Inhalt eines Flex- oder Grid-Elements in eine Tabellenzelle schreiben."""
+        """Write the content of a flex or grid item into a table cell."""
         if item.el is None:
             holder, _ = self.apply_text(td, text_ctx(container), DEFAULT_CTX)
             add_text(holder, collapse(item.text).strip())
@@ -477,7 +476,7 @@ class Converter:
             holder = td
             pad, border = self.padding(s, avail), self.border(s)
             if pad or border:
-                # height=100%, damit Rahmen und Hintergrund die gestreckte Zelle füllen
+                # height=100% so border and background fill the stretched cell
                 inner = sub(td, 'table', width='100%', height='100%', cellspacing=0,
                             cellpadding=pad, border=border)
                 if border and color(s['border-color']):
@@ -515,7 +514,7 @@ class Converter:
             table.set('cellspacing', str(gap))
             self.flex_row(table, items, s, cavail, gap)
         else:
-            # Jede Zeile eine eigene Tabelle, damit die Spaltenbreiten unabhängig sind
+            # One table per line, so the column widths are independent
             for line in lines:
                 td = sub(sub(table, 'tr'), 'td')
                 row = sub(td, 'table', width='100%', cellspacing=gap, cellpadding=0, border=0)
@@ -536,12 +535,12 @@ class Converter:
         return size, grow
 
     def flex_lines(self, items, avail, gap):
-        """Elemente bei flex-wrap anhand der geschätzten Breiten auf Zeilen verteilen."""
+        """Distribute flex-wrap items over lines based on their estimated widths."""
         widths = []
         for item in items:
             size = self.flex_basis(item.style)[0] if item.el is not None else None
             if size is None:
-                return [items]  # Breite unbekannt: alles in eine Zeile
+                return [items]  # width unknown: everything on one line
             widths.append(size[1] if size[0] == 'px' else size[1] * avail / 100)
         lines, used = [[]], 0
         for item, w in zip(items, widths):
@@ -567,7 +566,7 @@ class Converter:
         used_pct = sum(size_px(size) for size, g in sizes if not g) * 100 / max(avail, 1)
 
         cells = []
-        flexible = False  # nimmt irgendeine Zelle den freien Platz ein?
+        flexible = False  # does any cell take up the free space?
         for item, (size, grow) in zip(line, sizes):
             width, nowrap = None, False
             if grow > 0:
@@ -579,13 +578,13 @@ class Converter:
             elif len(collapse(self.text_of(item)).strip()) <= SHORT_TEXT:
                 nowrap = True
             else:
-                flexible = True  # langer Text: Browser verteilt den Platz
+                flexible = True  # long text: the browser distributes the space
             cells.append((item, width, nowrap, grow))
 
         justify = s['justify-content'] or 'normal'
         n = len(cells)
         if flexible or table.get('width') is None:
-            pattern = [False] * n  # kein freier Platz zu verteilen
+            pattern = [False] * n  # no free space to distribute
         elif justify == 'center':
             pattern = [True] + [False] * n + [True]
         elif justify in ('flex-end', 'end', 'right'):
@@ -667,16 +666,16 @@ class Converter:
         return root
 
 
-# -- Grid-Hilfsfunktionen -----------------------------------------------------
+# -- Grid helpers -------------------------------------------------------------
 
 def parse_tracks(value, avail, gap):
-    """grid-template-columns in eine Liste von Spurdefinitionen übersetzen."""
+    """Translate grid-template-columns into a list of track definitions."""
     if not value or value == 'none':
         return []
     out = []
     for t in tokens(value):
         if t.type == '[] block':
-            continue  # Linien-Namen
+            continue  # line names
         if t.type == 'function' and t.lower_name == 'repeat':
             groups = split_commas(t.arguments)
             if len(groups) < 2 or not groups[0]:
@@ -715,7 +714,7 @@ def parse_track(t):
 
 
 def track_widths(tracks, avail, gap):
-    """Spaltenbreiten als ('px', n), ('%', n) oder None."""
+    """Column widths as ('px', n), ('%', n) or None."""
     usable = max(1.0, avail - gap * (len(tracks) - 1))
     fixed_px = sum(t['px'] for t in tracks if t['kind'] == 'px')
     fixed_pct = sum(t['value'] for t in tracks if t['kind'] == '%')
@@ -735,7 +734,7 @@ def track_widths(tracks, avail, gap):
 
 
 def span_width(widths, avail, gap):
-    """Breite einer Zelle über mehrere Spalten: Attributwert und Schätzung in px."""
+    """Width of a cell spanning several columns: attribute value and estimate in px."""
     if widths and all(w and w[0] == '%' for w in widths):
         total = sum(w[1] for w in widths)
         return pct(total), avail * total / 100
@@ -791,7 +790,7 @@ def line_index(line, n, rects, axis, is_start):
 
 
 def resolve_axis(start, end, n, rects, axis):
-    """Anfang (0-basiert oder None für automatisch) und Spannweite einer Achse."""
+    """Start (0-based, or None for automatic) and span along one axis."""
     s, e = parse_line(start), parse_line(end)
     si = line_index(s, n, rects, axis, True) if s and s[0] != 'span' else None
     ei = line_index(e, n, rects, axis, False) if e and e[0] != 'span' else None
@@ -808,7 +807,7 @@ def resolve_axis(start, end, n, rects, axis):
 
 
 def place_items(items, ncols, areas):
-    """Grid-Elemente in ein Raster setzen (vereinfachter Auto-Placement-Algorithmus)."""
+    """Place grid items in a grid (simplified auto-placement algorithm)."""
     rects = area_rects(areas)
     nrows = len(areas)
     specs = []
@@ -869,10 +868,10 @@ def place_items(items, ncols, areas):
     return placed, ncols
 
 
-# -- Öffentliche Schnittstelle --------------------------------------------------
+# -- Public interface ---------------------------------------------------------
 
 def _newlines(node):
-    """Zeilenumbrüche zwischen Tabellenzeilen, damit die Ausgabe lesbar bleibt."""
+    """Line breaks between table rows, so the output stays readable."""
     for el in node.iter('table', 'tr'):
         if el.tail is None or not el.tail.strip():
             el.tail = '\n' + (el.tail or '').lstrip('\n')
@@ -881,11 +880,11 @@ def _newlines(node):
 
 
 def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
-    """HTML-Text (str oder bytes) in HTML 4.01 mit Tabellen-Layout umwandeln.
+    """Convert HTML text (str or bytes) into HTML 4.01 with a table layout.
 
-    viewport_width: angenommene Bildschirmbreite für Media Queries und Schätzungen.
-    base_url: relative Links und Bilder werden darauf bezogen absolut gemacht.
-    load_stylesheet: Funktion url -> CSS-Text (oder None) für <link>/@import.
+    viewport_width: assumed screen width for media queries and estimates.
+    base_url: relative links and images are made absolute against it.
+    load_stylesheet: function url -> CSS text (or None) for <link>/@import.
     """
     doc = lxml.html.document_fromstring(html)
     if base_url:

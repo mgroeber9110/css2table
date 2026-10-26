@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grid-Testseite</title>
+<title>Grid test page</title>
 <style>
   :root {
     --accent: #2563eb;
@@ -20,7 +20,7 @@
     color: var(--text);
     background: var(--bg);
   }
-  /* Mobil zuerst: alles untereinander */
+  /* Mobile first: everything stacked */
   .page { display: grid; gap: var(--gap); padding: var(--gap); }
   @media (min-width: 720px) {
     .page {
@@ -64,40 +64,40 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; }
   .cookie { position: fixed; bottom: 0; left: 0; right: 0; background: #000; color: #fff; }
 </style>
-<script>console.log("wird entfernt");</script>
+<script>console.log("will be removed");</script>
 </head>
 <body>
 <div class="page">
-  <header><h1>Dashboard</h1><span class="sr-only">Nur für Screenreader</span></header>
+  <header><h1>Dashboard</h1><span class="sr-only">Screen readers only</span></header>
   <aside>
     <nav>
       <ul>
-        <li><a href="/start">Übersicht</a></li>
-        <li><a href="/berichte">Berichte</a></li>
-        <li><a href="/einstellungen">Einstellungen</a></li>
+        <li><a href="/overview">Overview</a></li>
+        <li><a href="/reports">Reports</a></li>
+        <li><a href="/settings">Settings</a></li>
       </ul>
     </nav>
   </aside>
   <main>
     <section class="stats">
-      <div class="stat"><strong>128</strong>Besucher</div>
-      <div class="stat"><strong>42</strong>Bestellungen</div>
-      <div class="stat"><strong>7</strong>Retouren</div>
+      <div class="stat"><strong>128</strong>Visitors</div>
+      <div class="stat"><strong>42</strong>Orders</div>
+      <div class="stat"><strong>7</strong>Returns</div>
     </section>
     <section class="cards">
-      <article class="card wide"><h3>Hinweis</h3><p>Diese Karte spannt über zwei Spalten.</p></article>
-      <article class="card"><h3>Karte 1</h3><p>Etwas Text in der Karte.</p></article>
-      <article class="card"><h3>Karte 2</h3><p>Noch mehr Text.</p></article>
-      <article class="card"><h3>Karte 3</h3><p>Und noch eine.</p></article>
-      <article class="card"><h3>Karte 4</h3><p>Die letzte Karte.</p></article>
+      <article class="card wide"><h3>Notice</h3><p>This card spans two columns.</p></article>
+      <article class="card"><h3>Card 1</h3><p>Some text in the card.</p></article>
+      <article class="card"><h3>Card 2</h3><p>Even more text.</p></article>
+      <article class="card"><h3>Card 3</h3><p>And another one.</p></article>
+      <article class="card"><h3>Card 4</h3><p>The last card.</p></article>
     </section>
     <section class="gallery">
-      <div class="big">Groß (2 Zeilen)</div>
+      <div class="big">Large (2 rows)</div>
       <div>A</div><div>B</div><div>C</div><div>D</div>
     </section>
   </main>
-  <footer>&copy; 2026 Beispiel GmbH</footer>
+  <footer>&copy; 2026 Example Inc.</footer>
 </div>
-<div class="cookie">Wir verwenden Cookies.</div>
+<div class="cookie">We use cookies.</div>
 </body>
 </html>

@@ -1,7 +1,7 @@
-"""Umwandlung echter, gespeicherter Webseiten aus testpages/.
+"""Conversion of real, saved web pages from testpages/.
 
-Die Seiten selbst sind nicht im Repo (siehe testpages/README.md); ohne sie
-werden diese Tests übersprungen.
+The pages themselves are not in the repository (see testpages/README.md);
+without them these tests are skipped.
 """
 
 import os
@@ -12,11 +12,11 @@ from tools.testpages import check, find_pages
 
 PAGES = find_pages()
 
-# Anteil des sichtbaren Originaltexts, der mindestens erhalten bleiben muss
+# Minimum share of the visible original text that must be kept
 MIN_TEXT_COVERAGE = 0.8
 
 
-@pytest.mark.skipif(not PAGES, reason='keine Testseiten in testpages/')
+@pytest.mark.skipif(not PAGES, reason='no test pages in testpages/')
 @pytest.mark.parametrize('path', PAGES, ids=[os.path.relpath(p, os.path.dirname(os.path.dirname(p))) for p in PAGES])
 def test_saved_page(path):
     result = check(path)

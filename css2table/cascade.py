@@ -1,7 +1,7 @@
-"""CSS-Kaskade: Stylesheets einlesen, Regeln zuordnen, Werte je Element berechnen.
+"""CSS cascade: read stylesheets, match rules, compute values per element.
 
-Bewusst einfach gehalten: Es gibt keine Layout-Berechnung, nur die
-Werte, die der Konverter für die Abbildung auf Tabellen braucht.
+Deliberately simple: there is no layout computation, only the values
+the converter needs to map the page onto tables.
 """
 
 import re
@@ -67,7 +67,7 @@ for _side in ('top', 'right', 'bottom', 'left'):
 
 
 class Style(dict):
-    """Berechnete Werte eines Elements; fehlende Werte liefern den Startwert."""
+    """Computed values of an element; missing values return the initial value."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -94,7 +94,7 @@ BORDER_STYLES = {'none', 'hidden', 'dotted', 'dashed', 'solid', 'double',
 
 
 def expand(name, value):
-    """Kurzschreibweisen in Einzeleigenschaften zerlegen."""
+    """Expand shorthand properties into longhands."""
     if name in ('margin', 'padding'):
         sides = _four(value)
         if not sides:
@@ -144,7 +144,7 @@ def expand(name, value):
         start, _, end = value.partition('/')
         start = start.strip()
         if not end and not start.startswith('span') and not start.lstrip('-').isdigit():
-            end = start  # benannte Linie gilt für Anfang und Ende
+            end = start  # a named line applies to start and end
         return [(name + '-start', start), (name + '-end', end.strip() or 'auto')]
     if name == 'grid-area':
         p = [x.strip() for x in value.split('/')]
@@ -188,7 +188,7 @@ VAR_RE = re.compile(r'var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))
 
 
 def substitute(value, custom):
-    """var(--name, fallback) durch den Wert der Custom Property ersetzen."""
+    """Replace var(--name, fallback) with the value of the custom property."""
     for _ in range(8):
         if 'var(' not in value:
             break
@@ -197,7 +197,7 @@ def substitute(value, custom):
 
 
 def declarations(content):
-    """Deklarationen eines Regelblocks oder style-Attributs als (name, wert, wichtig)."""
+    """Declarations of a rule block or style attribute as (name, value, important)."""
     out = []
     for d in tinycss2.parse_blocks_contents(content, skip_comments=True, skip_whitespace=True):
         if d.type != 'declaration':
@@ -208,7 +208,7 @@ def declarations(content):
 
 
 class StyleResolver:
-    """Ordnet die CSS-Regeln eines Dokuments den Elementen zu."""
+    """Matches the CSS rules of a document to its elements."""
 
     def __init__(self, root, viewport_width=800, load_stylesheet=None):
         self.viewport = viewport_width

@@ -1,13 +1,13 @@
-"""Gespeicherte Webseiten aus testpages/ umwandeln und auswerten.
+"""Convert and evaluate saved web pages from testpages/.
 
-Jede Seite liegt in einem eigenen Unterordner, so wie der Browser sie mit
-"Seite speichern unter" ablegt (seite.html plus seite_files/ mit CSS):
+Each page lives in its own subfolder, as the browser stores it with
+"Save page as" (page.html plus page_files/ with the CSS):
 
     testpages/tagesschau/tagesschau.de.html
     testpages/tagesschau/tagesschau.de_files/main.css
 
-Aufruf: python tools/testpages.py [ordner]
-Die Ausgabe landet in testpages/out/<name>.html.
+Usage: python tools/testpages.py [folder]
+The output goes to testpages/out/<name>.html.
 """
 
 import os
@@ -29,7 +29,7 @@ ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 
 
 def find_pages(root=ROOT):
-    """Alle HTML-Dateien direkt in den Unterordnern von `root`."""
+    """All HTML files directly inside the subfolders of `root`."""
     pages = []
     if not os.path.isdir(root):
         return pages
@@ -48,7 +48,7 @@ def words(text):
 
 
 def visible_words(html, base_dir):
-    """Wörter, die im Original laut CSS sichtbar sind (ohne Skripte, display:none usw.)."""
+    """Words that the CSS makes visible in the original (no scripts, display:none etc.)."""
     doc = lxml.html.document_fromstring(html)
     styles = StyleResolver(doc, load_stylesheet=file_loader(base_dir))
     parts = []
@@ -76,7 +76,7 @@ def output_words(html):
 
 
 def check(path, out_dir=None):
-    """Seite umwandeln; liefert Kennzahlen als dict."""
+    """Convert a page; returns metrics as a dict."""
     with open(path, 'rb') as f:
         html = f.read()
     base_dir = os.path.dirname(path)
@@ -105,15 +105,15 @@ def main(argv=None):
     root = (argv or sys.argv[1:] or [ROOT])[0]
     pages = find_pages(root)
     if not pages:
-        print(f'Keine Testseiten in {root} gefunden.')
+        print(f'No test pages found in {root}.')
         return 1
     out_dir = os.path.join(root, 'out')
-    print(f'{"Seite":40} {"Zeit":>6} {"KB ein":>7} {"KB aus":>7} {"Tabellen":>8} {"Text":>6}')
+    print(f'{"Page":40} {"Time":>6} {"KB in":>7} {"KB out":>7} {"Tables":>8} {"Text":>6}')
     for path in pages:
         r = check(path, out_dir)
         print(f'{r["page"]:40} {r["seconds"]:5.1f}s {r["size_in"] // 1024:7} '
               f'{r["size_out"] // 1024:7} {r["tables"]:8} {r["text_coverage"]:6.0%}')
-    print(f'Ausgabe in {out_dir}')
+    print(f'Output in {out_dir}')
     return 0
 
 

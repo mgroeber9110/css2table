@@ -1,88 +1,92 @@
 # css2table
 
-Wandelt das CSS-Layout moderner Webseiten in HTML 4.01 mit Tabellen um, damit
-Browser von etwa 2001 (IE 5/6, Netscape 4, Opera 5) ein ähnliches Layout zeigen.
-Die Ausgabe enthält kein JavaScript und nur einfache Inline-Styles (CSS1).
+Converts the CSS layout of modern web pages into HTML 4.01 with tables, so that
+browsers from around 2001 (IE 5/6, Netscape 4, Opera 5) show a similar layout.
+The output contains no JavaScript and only simple inline styles (CSS1).
 
-Das ist der erste Prototyp des Konverters. Einen Proxy-Server gibt es noch nicht.
+This is the first prototype of the converter. There is no proxy server yet.
 
-## Ansatz
+## Approach
 
-Es wird **kein Layout berechnet** und kein Headless-Browser verwendet. Stattdessen
-übersetzt css2table die geometrischen Vorgaben des CSS direkt in
-Tabellen-Eigenschaften. Der alte Browser passt die Tabellen dann selbst an
-Fenstergröße und Schriftgröße an.
+css2table **does not compute a layout** and does not use a headless browser.
+Instead it translates the geometric constraints of the CSS directly into table
+properties. The legacy browser then adapts the tables to the window size and
+font size by itself.
 
-1. HTML mit `lxml` parsen.
-2. CSS aus `<style>`, `<link>` und `@import` mit `tinycss2` lesen, Regeln per
-   `cssselect2` zuordnen und die Kaskade selbst auflösen (Spezifität,
-   `!important`, Inline-Styles, Vererbung, `var()`, Media Queries für eine
-   angenommene Bildschirmbreite).
-3. Je Element entscheiden: Flex- oder Grid-Container werden zu Tabellen, Blöcke mit
-   Hintergrund, Innenabstand oder Breite zu einzelligen Tabellen, alles andere
-   bleibt (ggf. mit HTML4-Tag) erhalten.
-4. Schrift und Farben als `<font>`, `bgcolor`, `align` usw. ausgeben, zusätzlich als
-   `style`-Attribut für Browser, die CSS1 können.
+1. Parse the HTML with `lxml`.
+2. Read CSS from `<style>`, `<link>` and `@import` with `tinycss2`, match rules with
+   `cssselect2` and resolve the cascade ourselves (specificity, `!important`,
+   inline styles, inheritance, `var()`, media queries for an assumed screen
+   width).
+3. Decide per element: flex and grid containers become tables; blocks with a
+   background, padding or width become single-cell tables; everything else is
+   kept (with an HTML4 tag where needed).
+4. Output fonts and colors as `<font>`, `bgcolor`, `align` etc., and additionally
+   as a `style` attribute for browsers that support CSS1.
 
-| CSS | Tabelle |
+| CSS | Table |
 | --- | --- |
-| `display: flex` (Zeile) | eine `<tr>`, eine `<td>` je Kind |
-| `flex-direction: column` | eine `<tr>` je Kind |
-| `flex: 1`, `flex-grow` | `<td width="x%">` anteilig |
-| `width` / `flex-basis` | `<td width>` in px oder % |
-| `justify-content` | leere Abstandszellen (`center`, `space-between`, ...) |
+| `display: flex` (row) | one `<tr>`, one `<td>` per child |
+| `flex-direction: column` | one `<tr>` per child |
+| `flex: 1`, `flex-grow` | `<td width="x%">` proportionally |
+| `width` / `flex-basis` | `<td width>` in px or % |
+| `justify-content` | empty spacer cells (`center`, `space-between`, ...) |
 | `align-items` / `align-self` | `valign` |
-| `flex-wrap: wrap` | Zeilen anhand geschätzter Breiten, eine Tabelle je Zeile |
+| `flex-wrap: wrap` | lines based on estimated widths, one table per line |
 | `gap` | `cellspacing` |
-| `grid-template-columns` (px, %, fr, `repeat()`, `minmax()`, `auto-fill`) | Spaltenbreiten; `fr` wird zu Prozent |
-| `grid-column` / `grid-row` (`span`, Liniennummern) | `colspan` / `rowspan` |
-| `grid-template-areas` / `grid-area` | Raster mit `colspan` / `rowspan` |
-| `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (volle Breite, wenn `max-width` größer als der Bildschirm ist) |
-| `padding` | `cellpadding` (Mittelwert der vier Seiten) |
+| `grid-template-columns` (px, %, fr, `repeat()`, `minmax()`, `auto-fill`) | column widths; `fr` becomes a percentage |
+| `grid-column` / `grid-row` (`span`, line numbers) | `colspan` / `rowspan` |
+| `grid-template-areas` / `grid-area` | grid with `colspan` / `rowspan` |
+| `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (full width if `max-width` is wider than the screen) |
+| `padding` | `cellpadding` (average of the four sides) |
 | `border` | `border` + `bordercolor` |
-| `background(-color)`, auch Verläufe | `bgcolor` (erste Farbe) |
+| `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |
-| `display: none`, `position: fixed`, `<script>`, `<iframe>`, `<video>`, `<svg>` | entfällt |
+| `display: none`, `position: fixed`, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
 
-## Benutzung
+## Usage
 
 ```sh
 pip install -e '.[test]'
-python -m css2table seite.html -o seite-alt.html
-python -m css2table seite.html --width 640 --encoding iso-8859-1 --base-url https://example.org/
+python -m css2table page.html -o page-legacy.html
+python -m css2table page.html --width 640 --encoding iso-8859-1 --base-url https://example.org/
 ```
 
-- `--width`: angenommene Bildschirmbreite in Pixel (Standard 800) für Media Queries
-  und für Schätzungen wie `auto-fill` oder `flex-wrap`.
-- `--base-url`: macht relative Links und Bilder absolut.
-- `--encoding`: Zeichensatz der Ausgabe; nicht darstellbare Zeichen werden zu `&#…;`.
+- `--width`: assumed screen width in pixels (default 800) for media queries and
+  for estimates such as `auto-fill` or `flex-wrap`.
+- `--base-url`: makes relative links and images absolute.
+- `--encoding`: character set of the output; characters that cannot be encoded
+  become `&#…;`.
 
-Verlinkte Stylesheets werden nur aus lokalen Dateien relativ zur Eingabe geladen.
+Linked stylesheets are only loaded from local files relative to the input.
 
-Als Bibliothek:
+As a library:
 
 ```python
 from css2table import convert
-html4 = convert(open('seite.html', 'rb').read(), viewport_width=800)
+html4 = convert(open('page.html', 'rb').read(), viewport_width=800)
 ```
 
-## Beispiele und Tests
+## Examples and tests
 
-`examples/grid.html` und `examples/flex.html` sind Testseiten mit typischen
-Grid- und Flexbox-Layouts, `examples/out/` enthält die umgewandelten Fassungen.
+`examples/grid.html` and `examples/flex.html` are test pages with typical grid
+and flexbox layouts; `examples/out/` contains the converted versions.
+
+Saved real-world pages go in `testpages/` (not checked in, see
+[testpages/README.md](testpages/README.md)).
 
 ```sh
 python -m pytest
+python tools/testpages.py
 ```
 
-## Bekannte Grenzen
+## Known limitations
 
-- Kein JavaScript: Inhalte, die erst per Skript entstehen, fehlen.
-- `flex-wrap` und `auto-fill` beruhen auf geschätzten Breiten; ohne bekannte Breiten
-  bleibt alles in einer Zeile.
-- `gap` wird zu `cellspacing` und erscheint deshalb auch am Rand der Tabelle.
-- Abstände (`margin`) zwischen Blöcken werden ignoriert, `padding` ist pro Box
-  ein einziger Wert.
-- `position: absolute`, `transform`, `float` von Blöcken (außer als `align`) und
-  Pseudo-Elemente (`::before`) werden nicht nachgebildet.
-- `max-width` kleiner als die Bildschirmbreite wird zu einer festen Pixelbreite.
+- No JavaScript: content that is only created by scripts is missing.
+- `flex-wrap` and `auto-fill` rely on estimated widths; without known widths
+  everything stays on one line.
+- `gap` becomes `cellspacing` and therefore also appears at the table edges.
+- Margins between blocks are ignored; `padding` is a single value per box.
+- `position: absolute`, `transform`, floats of blocks (except as `align`) and
+  pseudo-elements (`::before`) are not reproduced.
+- A `max-width` smaller than the screen width becomes a fixed pixel width.

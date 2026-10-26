@@ -1,4 +1,4 @@
-"""css2table: CSS-Layouts moderner Webseiten in HTML4-Tabellen umwandeln."""
+"""css2table: convert the CSS layouts of modern web pages into HTML4 tables."""
 
 from .convert import convert
 

@@ -1,7 +1,7 @@
 [project]
 name = "css2table"
 version = "0.1.0"
-description = "Wandelt CSS-Layouts moderner Webseiten in HTML4-Tabellen für alte Browser um"
+description = "Converts the CSS layouts of modern web pages into HTML4 tables for legacy browsers"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["lxml", "tinycss2", "cssselect2"]
