@@ -1,0 +1,20 @@
+[project]
+name = "css2table"
+version = "0.1.0"
+description = "Wandelt CSS-Layouts moderner Webseiten in HTML4-Tabellen für alte Browser um"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["lxml", "tinycss2", "cssselect2"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+css2table = "css2table.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["css2table"]

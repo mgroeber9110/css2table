@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Flexbox-Testseite</title>
+<link rel="stylesheet" href="flex.css">
+<style>
+  body { margin: 0; font-family: Georgia, serif; color: #222; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a class="logo" href="/">Retro<b>Web</b></a>
+  <ul class="menu">
+    <li><a href="/produkte">Produkte</a></li>
+    <li><a href="/preise">Preise</a></li>
+    <li><a href="/kontakt">Kontakt</a></li>
+  </ul>
+</nav>
+
+<section class="hero">
+  <h1>Moderne Seiten, alte Browser</h1>
+  <p>Flexbox wird zu Tabellen, damit auch ein Browser von 2001 etwas erkennt.</p>
+  <a class="button" href="/los">Jetzt starten</a>
+</section>
+
+<div class="wrap">
+  <div class="features">
+    <div class="feature"><h2>Schnell</h2><p>Keine Skripte, nur HTML.</p></div>
+    <div class="feature"><h2>Flexibel</h2><p>Die Tabellen passen sich der Fensterbreite an, weil Breiten in Prozent angegeben werden.</p></div>
+    <div class="feature"><h2>Einfach</h2><p>Einfachheit geht vor Perfektion.</p></div>
+  </div>
+
+  <div class="sidebar-layout">
+    <aside class="side">
+      <h3>Seitenleiste</h3>
+      <p>Feste Breite von 200px.</p>
+    </aside>
+    <div class="content">
+      <h3>Inhalt</h3>
+      <p>Dieser Bereich wächst mit <code>flex: 1</code> und nimmt den restlichen Platz ein.
+         Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>
+    </div>
+  </div>
+
+  <h2>Galerie mit flex-wrap</h2>
+  <div class="gallery">
+    <div class="tile">Eins</div><div class="tile">Zwei</div><div class="tile">Drei</div>
+    <div class="tile">Vier</div><div class="tile">Fünf</div>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>&copy; 2026 RetroWeb</span>
+  <span><a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a></span>
+</footer>
+</body>
+</html>
