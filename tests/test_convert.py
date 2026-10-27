@@ -285,6 +285,23 @@ def test_grid_template_areas():
     assert 'M' in main.text_content()
 
 
+
+def test_inline_spacing_becomes_nbsp():
+    doc = parse(page('a { margin: 0 8px }', '<p><a href="#">A</a><a href="#">B</a></p>'))
+    first = doc.find('.//a')
+    assert first.text_content().startswith('\u00a0') and first.text_content().endswith('\u00a0')
+
+
+def test_webkit_box_is_block():
+    doc = parse(page('.h { display: -webkit-box }', '<h3><span>Top</span><span class="h">Head</span></h3>'))
+    assert doc.find('.//div').text_content().strip() == 'Head'
+
+
+def test_wide_menu_row_wraps():
+    links = ''.join(f'<li>Menu entry {i}</li>' for i in range(12))
+    doc = parse(page('ul { display: flex; white-space: nowrap }', f'<ul>{links}</ul>'))
+    assert len(doc.xpath('//table/tr/td/table')) > 1  # one table per line
+
 @pytest.mark.parametrize('width, expected', [(800, 4), (400, 2)])
 def test_grid_auto_fill(width, expected):
     cards = ''.join(f'<div>{i}</div>' for i in range(8))
@@ -301,3 +318,15 @@ def test_example_pages_convert():
     for name in ('grid.html', 'flex.html'):
         out = convert((examples / name).read_bytes(), load_stylesheet=file_loader(str(examples)))
         assert '<table' in out and '<script' not in out
+
+
+def test_rem_uses_root_font_size():
+    doc, r = styles('html { font-size: 62.5% } p { font-size: 2rem }', '<p>t</p>')
+    assert r.style(doc.find('.//p')).font_size == 20
+
+
+def test_slider_wider_than_screen_wraps():
+    slides = ''.join(f'<div style="width: 1024px">Slide {i}</div>' for i in range(3))
+    doc = parse(page('.s { display: flex }', f'<div class="s">{slides}</div>'))
+    assert all(td.get('width') in (None, '100%') for td in doc.iter('td'))
+    assert len(doc.xpath('//table/tr/td/table')) == 3

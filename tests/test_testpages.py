@@ -13,7 +13,7 @@ from tools.testpages import check, find_pages
 PAGES = find_pages()
 
 # Minimum share of the visible original text that must be kept
-MIN_TEXT_COVERAGE = 0.8
+MIN_TEXT_COVERAGE = 0.95
 
 
 @pytest.mark.skipif(not PAGES, reason='no test pages in testpages/')

@@ -32,13 +32,14 @@ font size by itself.
 | `width` / `flex-basis` | `<td width>` in px or % |
 | `justify-content` | empty spacer cells (`center`, `space-between`, ...) |
 | `align-items` / `align-self` | `valign` |
-| `flex-wrap: wrap` | lines based on estimated widths, one table per line |
+| `flex-wrap: wrap`, rows wider than the screen (sliders, scrolling menus) | lines based on estimated widths (short texts by character count), one table per line |
 | `gap` | `cellspacing` |
 | `grid-template-columns` (px, %, fr, `repeat()`, `minmax()`, `auto-fill`) | column widths; `fr` becomes a percentage |
 | `grid-column` / `grid-row` (`span`, line numbers) | `colspan` / `rowspan` |
 | `grid-template-areas` / `grid-area` | grid with `colspan` / `rowspan` |
 | `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (full width if `max-width` is wider than the screen) |
 | `padding` | `cellpadding` (average of the four sides) |
+| horizontal `margin` / `padding` of inline elements | up to three `&nbsp;` |
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |

@@ -80,7 +80,9 @@ TAG_ATTRS = {
 INPUT_TYPES = {'text', 'password', 'checkbox', 'radio', 'submit', 'reset',
                'file', 'hidden', 'image', 'button'}
 
-BLOCK_DISPLAYS = {'block', 'list-item', 'flex', 'grid', 'table', 'flow-root'}
+# -webkit-box is mostly used for line clamping (-webkit-line-clamp) on blocks
+NBSP = '\u00a0'
+BLOCK_DISPLAYS = {'block', 'list-item', 'flex', 'grid', 'table', 'flow-root', '-webkit-box'}
 LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid'}
 VALIGN = {'center': 'middle', 'flex-end': 'bottom', 'end': 'bottom',
           'self-end': 'bottom', 'baseline': 'baseline'}
@@ -249,7 +251,26 @@ class Converter:
             node = self.box(el, s, avail, ctx, shrink)
         else:
             node = self.plain(el, s, avail, ctx)
+            if display not in BLOCK_DISPLAYS:
+                self.inline_space(node, s)
         out.append(node)
+
+    def inline_space(self, node, s):
+        """Horizontal margin and padding of inline elements as non-breaking spaces.
+
+        Without this, menu links that are spaced only by CSS run together.
+        """
+        def spaces(side):
+            n = sum(px(s[prop + side], s.font_size) or 0 for prop in ('margin-', 'padding-'))
+            return NBSP * min(3, round(n / (s.font_size * 0.3)))
+        left, right = spaces('left'), spaces('right')
+        if left:
+            node.text = left + (node.text or '')
+        if right:
+            if len(node):
+                node[-1].tail = (node[-1].tail or '') + right
+            else:
+                node.text = (node.text or '') + right
 
     def out_tag(self, el, s):
         tag = el.tag.lower()
@@ -542,7 +563,9 @@ class Converter:
 
         gap = self.gap(s, 'column-gap', cavail)
         lines = [items]
-        if s['flex-wrap'] in ('wrap', 'wrap-reverse'):
+        if s['flex-wrap'] in ('wrap', 'wrap-reverse') or self.overflows(items, cavail, gap):
+            # Carousels (sliders) are rows wider than the screen that scroll
+            # with JavaScript; a legacy browser shows their items wrapped instead
             lines = self.flex_lines(items, cavail, gap)
         if len(lines) == 1:
             table.set('cellspacing', str(gap))
@@ -568,20 +591,45 @@ class Converter:
             grow = 0.0
         return size, grow
 
+    def item_width(self, item, avail):
+        """Estimated width of a flex item in pixels, or None if unknown.
+
+        Uses width or flex-basis; for short texts (menu links, tags), the
+        width is estimated from the number of characters.
+        """
+        if item.el is None:
+            return None
+        size = self.flex_basis(item.style)[0]
+        if size is not None:
+            return size[1] if size[0] == 'px' else size[1] * avail / 100
+        text = collapse(self.text_of(item)).strip()
+        if not text or len(text) > SHORT_TEXT:
+            return None
+        fs = item.style.font_size
+        return len(text) * fs * 0.55 + 2 * fs  # average glyph width plus some spacing
+
+    def overflows(self, items, avail, gap):
+        """Are the items of a flex row clearly wider than the container?"""
+        total = 0
+        for item in items:
+            w = self.item_width(item, avail)
+            if w is None:
+                return False
+            total += w
+        return len(items) > 1 and total + gap * (len(items) - 1) > avail * 1.1
+
     def flex_lines(self, items, avail, gap):
         """Distribute flex-wrap items over lines based on their estimated widths."""
-        sizes = []
-        for item in items:
-            size = self.flex_basis(item.style)[0] if item.el is not None else None
-            if size is None:
-                return [items]  # width unknown: everything on one line
-            sizes.append(size)
         lines, used = [[]], 0
-        for item, (kind, n) in zip(items, sizes):
+        for item in items:
+            w = self.item_width(item, avail)
+            if w is None:
+                return [items]  # width unknown: everything on one line
             # Percentage widths usually already leave room for the gap,
-            # e.g. calc(50% - 1rem), so the gap only counts for pixel widths
-            w = n if kind == 'px' else n * avail / 100
-            spacing = gap if kind == 'px' and lines[-1] else 0
+            # e.g. calc(50% - 1rem), so the gap only counts for other widths
+            size = self.flex_basis(item.style)[0]
+            w = min(w, avail)
+            spacing = gap if lines[-1] and (size is None or size[0] == 'px') else 0
             if lines[-1] and used + spacing + w > avail + 0.5:
                 lines.append([])
                 used, spacing = 0, 0
@@ -596,7 +644,7 @@ class Converter:
         def size_px(size):
             if size is None:
                 return 0
-            return size[1] if size[0] == 'px' else size[1] * avail / 100
+            return min(size[1] if size[0] == 'px' else size[1] * avail / 100, avail)
 
         base = sum(size_px(size) for size, _ in sizes)
         free = max(0.0, avail - base - gap * (len(line) - 1))
@@ -612,7 +660,10 @@ class Converter:
                 width = pct((size_px(size) + free * grow / total_grow) * 100 / inner)
                 flexible = True
             elif size:
-                width = str(round(size[1])) if size[0] == 'px' else pct(size[1])
+                if size[0] == 'px' and size[1] > avail:
+                    width = '100%'  # wider than the container (e.g. a slide sized by JavaScript)
+                else:
+                    width = str(round(size[1])) if size[0] == 'px' else pct(size[1])
             elif len(collapse(self.text_of(item)).strip()) <= SHORT_TEXT:
                 nowrap = True
             else:

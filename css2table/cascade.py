@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 import cssselect2
 import tinycss2
 
-from .values import font_size, media_matches, parts, tokens, first_color
+from .values import ROOT_FONT_SIZE, first_color, font_size, media_matches, parts, tokens
 
 UA_CSS = """
 head, script, style, link, meta, title, template, base, [hidden], area,
@@ -279,6 +279,7 @@ class StyleResolver:
             self._import(href, base)
 
     def _compute(self, root):
+        ROOT_FONT_SIZE.set(16.0)  # `rem` on the root element itself uses the initial size
         wrapper = cssselect2.ElementWrapper.from_html_root(root)
         for w in wrapper.iter_subtree():
             el = w.etree_element
@@ -293,6 +294,8 @@ class StyleResolver:
             candidates.sort(key=lambda c: c[0])
             parent = el.getparent()
             self.computed[el] = self._resolve(candidates, self.computed.get(parent))
+            if parent is None:
+                ROOT_FONT_SIZE.set(self.computed[el].font_size)
 
     def _resolve(self, candidates, parent):
         style = Style()

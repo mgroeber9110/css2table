@@ -1,6 +1,7 @@
 """Helpers for reading individual CSS values."""
 
 import re
+from contextvars import ContextVar
 
 import tinycss2
 from tinycss2 import color3
@@ -10,6 +11,10 @@ ABS_UNITS = {'px': 1.0, 'pt': 4 / 3, 'pc': 16.0, 'in': 96.0,
 
 FONT_KEYWORDS = {'xx-small': 9, 'x-small': 10, 'small': 13, 'medium': 16,
                  'large': 18, 'x-large': 24, 'xx-large': 32, 'xxx-large': 48}
+
+# Font size of the root element (<html>) for `rem`; set by the cascade once
+# the root style is known. Many sites use html { font-size: 62.5% }.
+ROOT_FONT_SIZE = ContextVar('root_font_size', default=16.0)
 
 # Screen width assumed where a value needs one (the CLI default)
 VIEWPORT_WIDTH = 800
@@ -76,7 +81,7 @@ def length(value, font_size=16.0):
         if unit == 'em':
             return ('px', t.value * font_size)
         if unit == 'rem':
-            return ('px', t.value * 16.0)
+            return ('px', t.value * ROOT_FONT_SIZE.get())
         if unit in ('ex', 'ch'):
             return ('px', t.value * font_size / 2)
         if unit in ('vw', 'vi'):
