@@ -271,11 +271,29 @@ class Converter:
             if key in allowed:
                 node.set(key, value)
         if tag == 'img' and not node.get('src'):
-            src = el.get('data-src') or (el.get('srcset') or el.get('data-srcset') or '').split(' ')[0]
+            src = el.get('data-src') or self.pick_srcset(el.get('srcset') or el.get('data-srcset'))
             if src:
                 node.set('src', src)
         if tag == 'input' and (node.get('type') or 'text').lower() not in INPUT_TYPES:
             node.set('type', 'text')
+
+    def pick_srcset(self, srcset):
+        """Pick an image from a srcset: the widest that fits the screen, else the lowest density."""
+        widths, densities = [], []
+        for entry in (srcset or '').split(','):
+            parts = entry.split()
+            if not parts:
+                continue
+            descriptor = parts[1] if len(parts) > 1 else '1x'
+            try:
+                value = float(descriptor[:-1])
+            except ValueError:
+                continue
+            (widths if descriptor.endswith('w') else densities).append((value, parts[0]))
+        if widths:
+            fitting = [w for w in widths if w[0] <= self.viewport]
+            return max(fitting)[1] if fitting else min(widths)[1]
+        return min(densities)[1] if densities else None
 
     def plain(self, el, s, avail, ctx):
         """Keep the element with the same (or a similar HTML4) tag."""
@@ -899,6 +917,34 @@ def _newlines(node):
             el.text = '\n'
 
 
+# Void elements that are new in HTML5. libxml2's HTML parser does not know
+# they are empty and nests the following content inside them.
+HTML5_VOID = ('source', 'track', 'wbr', 'embed', 'param', 'keygen')
+
+
+def parse(html):
+    """Parse HTML and move content wrongly nested in HTML5 void elements back out.
+
+    Without this, the <img> in <picture><source><img></picture> would end up
+    inside <source> and be dropped with it.
+    """
+    doc = lxml.html.document_fromstring(html)
+    for el in list(doc.iter(*HTML5_VOID)):
+        children = list(el)
+        if not children and not el.text:
+            continue
+        parent = el.getparent()
+        tail, el.tail, el.text = el.tail, el.text, None
+        index = parent.index(el)
+        for offset, child in enumerate(children, 1):
+            parent.insert(index + offset, child)
+        if children:
+            children[-1].tail = (children[-1].tail or '') + (tail or '')
+        else:
+            el.tail = (el.tail or '') + (tail or '')
+    return doc
+
+
 def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     """Convert HTML text (str or bytes) into HTML 4.01 with a table layout.
 
@@ -906,7 +952,7 @@ def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     base_url: relative links and images are made absolute against it.
     load_stylesheet: function url -> CSS text (or None) for <link>/@import.
     """
-    doc = lxml.html.document_fromstring(html)
+    doc = parse(html)
     if base_url:
         doc.make_links_absolute(base_url, resolve_base_href=True)
     out = Converter(doc, viewport_width, load_stylesheet).build()

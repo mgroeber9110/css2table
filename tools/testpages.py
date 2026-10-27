@@ -96,6 +96,7 @@ def check(path, out_dir=None):
         'size_in': len(html),
         'size_out': len(result.encode('utf-8')),
         'tables': result.count('<table'),
+        'images': (html.count(b'<img'), result.count('<img')),
         'text_coverage': kept / max(1, sum(original.values())),
         'html': result,
     }
@@ -108,11 +109,12 @@ def main(argv=None):
         print(f'No test pages found in {root}.')
         return 1
     out_dir = os.path.join(root, 'out')
-    print(f'{"Page":40} {"Time":>6} {"KB in":>7} {"KB out":>7} {"Tables":>8} {"Text":>6}')
+    print(f'{"Page":40} {"Time":>6} {"KB in":>7} {"KB out":>7} {"Tables":>8} {"Img out/in":>10} {"Text":>6}')
     for path in pages:
         r = check(path, out_dir)
         print(f'{r["page"]:40} {r["seconds"]:5.1f}s {r["size_in"] // 1024:7} '
-              f'{r["size_out"] // 1024:7} {r["tables"]:8} {r["text_coverage"]:6.0%}')
+              f'{r["size_out"] // 1024:7} {r["tables"]:8} {"%d/%d" % r["images"][::-1]:>10} '
+              f'{r["text_coverage"]:6.0%}')
     print(f'Output in {out_dir}')
     return 0
 

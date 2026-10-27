@@ -119,6 +119,26 @@ def test_output_is_html4_without_scripts_and_classes():
         assert forbidden not in out
 
 
+def test_images_in_picture_are_kept():
+    out = parse(page('', '<picture><source type="image/webp" srcset="a.webp 400w">'
+                         '<img src="a.jpg" alt="Photo" width="400"></picture><p>after</p>'))
+    img = out.find('.//img')
+    assert img is not None
+    assert (img.get('src'), img.get('alt'), img.get('width')) == ('a.jpg', 'Photo', '400')
+    assert out.find('.//source') is None
+    assert 'after' in out.find('.//body').text_content()
+
+
+@pytest.mark.parametrize('srcset, expected', [
+    ('s.jpg 320w, m.jpg 768w, l.jpg 1920w', 'm.jpg'),
+    ('l.jpg 1920w, xl.jpg 3000w', 'l.jpg'),
+    ('a.jpg 2x, b.jpg 1x', 'b.jpg'),
+])
+def test_image_without_src_uses_srcset(srcset, expected):
+    out = parse(page('', f'<img srcset="{srcset}" alt="x">'))
+    assert out.find('.//img').get('src') == expected
+
+
 def test_hidden_and_fixed_elements_are_dropped():
     out = convert(page('.cookie { position: fixed; bottom: 0 } .no { display: none }',
                        '<div class="cookie">Cookie</div><p class="no">gone</p><p hidden>also</p><p>here</p>'))

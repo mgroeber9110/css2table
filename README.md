@@ -42,6 +42,7 @@ font size by itself.
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |
+| `<picture>` / `srcset` | the `<img>` inside is kept; without `src`, the widest `srcset` image that fits the screen is used |
 | `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
 | `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
 | `display: none`, off-screen elements (skip links, off-canvas menus), bottom-anchored or full-screen `position: fixed` overlays, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
@@ -95,3 +96,5 @@ python tools/testpages.py
   `clip`, `opacity: 0`).
 - Dropdown menus that are hidden only via `:hover` or JavaScript remain visible.
 - A `max-width` smaller than the screen width becomes a fixed pixel width.
+- Image formats are not converted: WebP, AVIF or SVG images need a later
+  conversion step (e.g. in the proxy) to show up in legacy browsers.
