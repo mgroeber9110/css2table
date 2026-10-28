@@ -330,3 +330,27 @@ def test_slider_wider_than_screen_wraps():
     doc = parse(page('.s { display: flex }', f'<div class="s">{slides}</div>'))
     assert all(td.get('width') in (None, '100%') for td in doc.iter('td'))
     assert len(doc.xpath('//table/tr/td/table')) == 3
+
+
+def test_css_table_cells_become_one_row():
+    doc = parse(page('ul { display: table } li { display: table-cell; white-space: nowrap }',
+                     '<ul><li>A</li><li>B</li><li>C</li></ul>'))
+    rows = [tr for tr in doc.iter('tr') if len(tr.findall('td')) == 3]
+    assert rows and rows[0].find('td').get('nowrap') is not None
+
+
+def test_text_transform_uppercase():
+    doc = parse(page('.k { text-transform: uppercase }', '<p class="k">Meran <b>heute</b></p>'))
+    assert 'MERAN HEUTE' in doc.find('.//body').text_content()
+
+
+def test_empty_icon_boxes_are_removed():
+    doc = parse(page('.i { padding: 10px; background: none }',
+                     '<div class="i"><i></i></div><p>Text</p>'))
+    assert len(doc.findall('.//table')) == 0
+    assert 'Text' in doc.find('.//body').text_content()
+
+
+def test_padding_top_for_fixed_header_is_ignored():
+    doc = parse(page('main { padding-top: 160px; background: #eee }', '<main>Text</main>'))
+    assert doc.find('.//table').get('cellpadding') == '0'

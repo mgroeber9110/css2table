@@ -37,8 +37,10 @@ font size by itself.
 | `grid-template-columns` (px, %, fr, `repeat()`, `minmax()`, `auto-fill`) | column widths; `fr` becomes a percentage |
 | `grid-column` / `grid-row` (`span`, line numbers) | `colspan` / `rowspan` |
 | `grid-template-areas` / `grid-area` | grid with `colspan` / `rowspan` |
+| `display: table` / `table-row` / `table-cell` | real table rows and cells |
+| `text-transform` | text converted to upper/lower case |
 | `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (full width if `max-width` is wider than the screen) |
-| `padding` | `cellpadding` (average of the four sides) |
+| `padding` | `cellpadding` (average of the four sides; top and bottom count at most as much as left/right) |
 | horizontal `margin` / `padding` of inline elements | up to three `&nbsp;` |
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
@@ -97,5 +99,6 @@ python tools/testpages.py
   `clip`, `opacity: 0`).
 - Dropdown menus that are hidden only via `:hover` or JavaScript remain visible.
 - A `max-width` smaller than the screen width becomes a fixed pixel width.
+- Boxes that end up empty (icons from icon fonts or `::before`) are removed.
 - Image formats are not converted: WebP, AVIF or SVG images need a later
   conversion step (e.g. in the proxy) to show up in legacy browsers.

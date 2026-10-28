@@ -45,13 +45,13 @@ center, th { text-align: center }
 """
 
 INHERITED = {'color', 'font-family', 'font-size', 'font-weight', 'font-style',
-             'text-align', 'white-space', 'visibility', 'list-style-type'}
+             'text-align', 'text-transform', 'white-space', 'visibility', 'list-style-type'}
 
 INITIAL = {
     'display': 'inline', 'position': 'static', 'float': 'none',
     'visibility': 'visible', 'color': 'black', 'font-family': 'Times New Roman',
     'font-size': '16px', 'font-weight': 'normal', 'font-style': 'normal',
-    'text-align': 'left', 'white-space': 'normal', 'list-style-type': 'disc',
+    'text-align': 'left', 'text-transform': 'none', 'white-space': 'normal', 'list-style-type': 'disc',
     'flex-direction': 'row', 'flex-wrap': 'nowrap', 'flex-grow': '0',
     'flex-basis': 'auto', 'justify-content': 'normal', 'align-items': 'normal',
     'align-self': 'auto', 'width': 'auto', 'max-width': 'none',

@@ -83,7 +83,8 @@ INPUT_TYPES = {'text', 'password', 'checkbox', 'radio', 'submit', 'reset',
 # -webkit-box is mostly used for line clamping (-webkit-line-clamp) on blocks
 NBSP = '\u00a0'
 BLOCK_DISPLAYS = {'block', 'list-item', 'flex', 'grid', 'table', 'flow-root', '-webkit-box'}
-LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid'}
+LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid', 'table', 'inline-table'}
+ROW_GROUPS = {'table-header-group', 'table-row-group', 'table-footer-group'}
 VALIGN = {'center': 'middle', 'flex-end': 'bottom', 'end': 'bottom',
           'self-end': 'bottom', 'baseline': 'baseline'}
 
@@ -133,6 +134,18 @@ def make(tag, **attrs):
     for k, v in attrs.items():
         node.set(k, str(v))
     return node
+
+
+def transform(text, s):
+    """Apply text-transform (uppercase labels are common in teasers)."""
+    mode = s['text-transform']
+    if mode == 'uppercase':
+        return text.upper()
+    if mode == 'lowercase':
+        return text.lower()
+    if mode == 'capitalize':
+        return re.sub(r'\b\w', lambda m: m.group().upper(), text)
+    return text
 
 
 def add_text(node, text):
@@ -225,16 +238,17 @@ class Converter:
         return 'rect(0' in (s['clip'] or '').replace(' ', '') or 'inset(50%' in (s['clip-path'] or '')
 
     def emit_children(self, el, out, avail, ctx, pre=False):
-        self.add_source_text(out, el.text, pre)
+        s = self.style(el)
+        self.add_source_text(out, el.text, s, pre)
         for child in el:
             if isinstance(child.tag, str):
                 self.emit(child, out, avail, ctx)
-            self.add_source_text(out, child.tail, pre)
+            self.add_source_text(out, child.tail, s, pre)
 
-    def add_source_text(self, out, text, pre=False):
+    def add_source_text(self, out, text, s, pre=False):
         if not text or (out.tag in NO_TEXT and not text.strip()):
             return
-        add_text(out, text if pre else collapse(text))
+        add_text(out, transform(text if pre else collapse(text), s))
 
     def emit(self, el, out, avail, ctx, boxed=False, shrink=False):
         s = self.style(el)
@@ -245,7 +259,7 @@ class Converter:
         if tag in TRANSPARENT or display == 'contents':
             self.emit_children(el, out, avail, ctx)
             return
-        if display in LAYOUT_DISPLAYS:
+        if display in LAYOUT_DISPLAYS and tag != 'table':
             node = self.layout(el, s, avail, shrink)
         elif not boxed and display in BLOCK_DISPLAYS and self.needs_box(tag, s):
             node = self.box(el, s, avail, ctx, shrink)
@@ -403,7 +417,12 @@ class Converter:
     def padding(self, s, avail):
         values = [px(s['padding-' + side], s.font_size, avail) or 0
                   for side in ('top', 'right', 'bottom', 'left')]
-        return round(sum(values) / 4)
+        # Average of the sides, with top and bottom limited to the horizontal
+        # padding: a large padding-top is often room for a fixed header, which
+        # the converted page shows in the normal flow
+        top, right, bottom, left = (max(0, v) for v in values)
+        side = max(left, right)
+        return round((min(top, side) + right + min(bottom, side) + left) / 4)
 
     def border(self, s):
         if s['border-style'] in ('none', 'hidden'):
@@ -477,7 +496,43 @@ class Converter:
     def layout(self, el, s, avail, shrink=False):
         if s['display'] in ('grid', 'inline-grid'):
             return self.grid(el, s, avail, shrink)
+        if s['display'] in ('table', 'inline-table'):
+            return self.css_table(el, s, avail, shrink)
         return self.flex(el, s, avail, shrink)
+
+    def table_cell(self, tr, item, container, avail):
+        td = sub(tr, 'td', valign='top')
+        if item.el is not None and item.style['white-space'] == 'nowrap':
+            td.set('nowrap', 'nowrap')
+        self.fill_cell(td, item, container, avail, shrink=True)
+
+    def css_table(self, el, s, avail, shrink=False):
+        """display: table on other elements (e.g. menus of table-cell items)."""
+        root, table, cavail = self.frame(s, avail, shrink or s['display'] == 'inline-table')
+        spacing = (s['border-spacing'] or '0').split()[0]
+        if s['border-collapse'] != 'collapse':
+            table.set('cellspacing', str(round(px(spacing, s.font_size) or 0)))
+        tr = None
+        for item in self.table_items(el):
+            if item.el is not None and item.style['display'] == 'table-row':
+                tr = sub(table, 'tr')
+                for cell in self.items(item.el):
+                    self.table_cell(tr, cell, item.style, cavail)
+                tr = None
+                continue
+            if tr is None:
+                tr = sub(table, 'tr')  # cells without a row form an anonymous row
+            self.table_cell(tr, item, s, cavail)
+        return root
+
+    def table_items(self, el):
+        out = []
+        for item in self.items(el):
+            if item.el is not None and item.style['display'] in ROW_GROUPS:
+                out += self.table_items(item.el)
+            else:
+                out.append(item)
+        return out
 
     def frame(self, s, avail, shrink):
         """Table for a layout container; nested when it has padding."""
@@ -521,7 +576,7 @@ class Converter:
         """Write the content of a flex or grid item into a table cell."""
         if item.el is None:
             holder, _ = self.apply_text(td, text_ctx(container), DEFAULT_CTX)
-            add_text(holder, collapse(item.text).strip())
+            add_text(holder, transform(collapse(item.text).strip(), item.style))
             return
         el, s = item.el, item.style
         if s['display'] not in LAYOUT_DISPLAYS and el.tag in CELL_MERGE:
@@ -996,6 +1051,33 @@ def parse(html):
     return doc
 
 
+# Elements that show something without containing text
+CONTENT_TAGS = {'img', 'input', 'select', 'textarea', 'button', 'hr', 'object', 'embed', 'applet'}
+PRUNABLE = {'div', 'span', 'table', 'font', 'b', 'i', 'u', 'a', 'p', 'center', 'small', 'big'}
+
+
+def _prune(node):
+    """Remove empty boxes, e.g. icons drawn with icon fonts or ::before.
+
+    They would only leave blank lines and empty table cells behind.
+    """
+    if node is None:
+        return
+    for el in reversed(list(node.iter(*PRUNABLE))):
+        if el.getparent() is None or el.get('bgcolor') or el.get('id') or el.get('name'):
+            continue
+        if (''.join(el.itertext()).replace(NBSP, ' ').strip()
+                or any(True for _ in el.iter(*CONTENT_TAGS))):
+            continue
+        parent, prev = el.getparent(), el.getprevious()
+        if el.tail:
+            if prev is not None:
+                prev.tail = (prev.tail or '') + el.tail
+            else:
+                parent.text = (parent.text or '') + el.tail
+        parent.remove(el)
+
+
 def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     """Convert HTML text (str or bytes) into HTML 4.01 with a table layout.
 
@@ -1007,6 +1089,7 @@ def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     if base_url:
         doc.make_links_absolute(base_url, resolve_base_href=True)
     out = Converter(doc, viewport_width, load_stylesheet).build()
+    _prune(out.find('body'))
     _newlines(out)
     result = lxml.html.tostring(out, doctype=DOCTYPE, encoding='unicode', method='html')
     meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
