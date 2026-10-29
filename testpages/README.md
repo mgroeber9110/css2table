@@ -34,3 +34,4 @@ images kept, and two text measures:
 | `ndr/` | NDR.de home page | 2026-10-26 | Teaser grid with flexbox and grid |
 | `tagesschau-main/` | tagesschau.de home page | 2026-10-27 | Long teaser page with sliders and many hidden labels |
 | `rainews/` | Tagesschau page of RaiNews (South Tyrol) | 2026-10-28 | Menu as CSS table (`display: table-cell`), icon fonts, uppercase labels |
+| `heise/` | heise online home page | 2026-10-29 | Long Tailwind page: utility classes, column grids, product sliders |

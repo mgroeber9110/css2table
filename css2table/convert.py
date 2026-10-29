@@ -136,6 +136,11 @@ def make(tag, **attrs):
     return node
 
 
+def text_width(text, font_size):
+    """Rough width of a short text: average glyph width plus some spacing."""
+    return len(text) * font_size * 0.55 + 2 * font_size
+
+
 def transform(text, s):
     """Apply text-transform (uppercase labels are common in teasers)."""
     mode = s['text-transform']
@@ -345,7 +350,11 @@ class Converter:
         decoration = s['text-decoration'] or s['text-decoration-line']
         if decoration:
             extra.append('text-decoration:' + decoration.split()[0])
-        if tag in ('img', 'table') and not node.get('width'):
+        elif tag == 'a' and el.get('href'):
+            extra.append('text-decoration:none')  # e.g. text-decoration: inherit from a block
+        if tag == 'img':
+            self.image_size(node, s, avail)
+        elif tag == 'table' and not node.get('width'):
             width = length(s['width'], s.font_size)
             if width:
                 node.set('width', str(round(width[1])) if width[0] == 'px' else pct(width[1]))
@@ -364,6 +373,28 @@ class Converter:
             wrapper.append(node)
             return wrapper
         return node
+
+    def image_size(self, node, s, avail):
+        """Image width from CSS; the width attribute is often the file's size."""
+        width = length(s['width'], s.font_size)
+        if width and width[1] > 0:
+            if width[0] == 'px' and width[1] > avail:
+                width = ('%', 100.0)
+            node.set('width', str(round(width[1])) if width[0] == 'px' else pct(width[1]))
+            height = length(s['height'], s.font_size)
+            if height and height[0] == 'px':
+                node.set('height', str(round(height[1])))
+            elif 'height' in node.attrib:
+                del node.attrib['height']  # keep the aspect ratio
+            return
+        try:
+            attr = int(node.get('width', ''))
+        except ValueError:
+            return
+        if attr > avail and s['max-width'] not in (None, 'none'):
+            # max-width: 100% shrinks large images to the container
+            node.set('width', '100%')
+            node.attrib.pop('height', None)
 
     def apply_text(self, node, new, old, extra=None):
         """Express font differences from `old` as a style attribute and <font>.
@@ -623,13 +654,15 @@ class Converter:
             # with JavaScript; a legacy browser shows their items wrapped instead
             lines = self.flex_lines(items, cavail, gap)
         if len(lines) == 1:
-            table.set('cellspacing', str(gap))
             self.flex_row(table, items, s, cavail, gap)
         else:
             # One table per line, so the column widths are independent
-            for line in lines:
+            row_gap = self.gap(s, 'row-gap', cavail)
+            for i, line in enumerate(lines):
+                if i and row_gap:
+                    sub(sub(table, 'tr'), 'td', height=str(row_gap))
                 td = sub(sub(table, 'tr'), 'td')
-                row = sub(td, 'table', width='100%', cellspacing=gap, cellpadding=0, border=0)
+                row = sub(td, 'table', width='100%', cellspacing=0, cellpadding=0, border=0)
                 self.flex_row(row, line, s, cavail, gap)
         return root
 
@@ -657,11 +690,23 @@ class Converter:
         size = self.flex_basis(item.style)[0]
         if size is not None:
             return size[1] if size[0] == 'px' else size[1] * avail / 100
+        inner = self.wrapped_width(item.el)
+        if inner is not None:
+            return inner
         text = collapse(self.text_of(item)).strip()
         if not text or len(text) > SHORT_TEXT:
             return None
-        fs = item.style.font_size
-        return len(text) * fs * 0.55 + 2 * fs  # average glyph width plus some spacing
+        return text_width(text, item.style.font_size)
+
+    def wrapped_width(self, el, depth=3):
+        """Pixel width of the only child, e.g. a card with a fixed width in an <li>."""
+        children = [c for c in el if isinstance(c.tag, str) and self.visible(c, self.style(c))]
+        if depth == 0 or len(children) != 1 or (el.text or '').strip() or (children[0].tail or '').strip():
+            return None
+        size = length(self.style(children[0])['width'], self.style(children[0]).font_size)
+        if size is not None:
+            return size[1] if size[0] == 'px' else None
+        return self.wrapped_width(children[0], depth - 1)
 
     def overflows(self, items, avail, gap):
         """Are the items of a flex row clearly wider than the container?"""
@@ -720,7 +765,12 @@ class Converter:
                 else:
                     width = str(round(size[1])) if size[0] == 'px' else pct(size[1])
             elif len(collapse(self.text_of(item)).strip()) <= SHORT_TEXT:
-                nowrap = True
+                # Short labels stay on one line if they fit; not images, whose
+                # size is unknown
+                text = collapse(self.text_of(item)).strip()
+                estimate = text_width(text, item.style.font_size)
+                nowrap = ((item.el is None or next(item.el.iter('img'), None) is None)
+                          and estimate <= avail / len(line))
             else:
                 flexible = True  # long text: the browser distributes the space
             cells.append((item, width, nowrap, grow))
@@ -744,12 +794,19 @@ class Converter:
 
         valign_default = VALIGN.get(s['align-items'], 'top')
         cells = iter(cells)
+        first = True
         for is_spacer in pattern:
             if is_spacer:
                 td = sub(tr, 'td')
                 if spacer_width >= 1:
                     td.set('width', pct(spacer_width))
                 continue
+            if gap and not first:
+                # A cell instead of cellspacing, which would also add the gap
+                # above, below and at the edges. Spaces keep it from collapsing
+                # next to a spacer cell with width=100%.
+                sub(tr, 'td', width=str(gap)).text = NBSP * max(1, round(gap / 4))
+            first = False
             item, width, nowrap, grow = next(cells)
             valign = valign_default
             if item.el is not None and item.style['align-self'] not in ('auto', None):
@@ -772,10 +829,18 @@ class Converter:
         root, table, cavail = self.frame(s, avail, shrink or s['display'] == 'inline-grid')
         column_gap = self.gap(s, 'column-gap', cavail)
         table.set('cellspacing', str(column_gap or self.gap(s, 'row-gap', cavail)))
-        tracks = parse_tracks(s['grid-template-columns'], cavail, column_gap)
+        template = s['grid-template-columns']
+        items = self.items(el)
+        if ('column' in (s['grid-auto-flow'] or '') and template in (None, 'none')
+                and s['grid-template-rows'] in (None, 'none') and items):
+            # Without rows, column flow puts every item in a column of its own
+            template = 'repeat(%d, %s)' % (len(items), s['grid-auto-columns'] or '1fr')
+            if template.endswith('auto)'):
+                template = 'repeat(%d, 1fr)' % len(items)
+        tracks = parse_tracks(template, cavail, column_gap)
         areas = parse_areas(s['grid-template-areas'])
         ncols = max(len(tracks), max((len(r) for r in areas), default=0), 1)
-        placed, ncols = place_items(self.items(el), ncols, areas)
+        placed, ncols = place_items(items, ncols, areas)
         tracks += [{'kind': 'auto'}] * (ncols - len(tracks))
         widths = track_widths(tracks, cavail, column_gap)
 

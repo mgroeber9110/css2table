@@ -33,12 +33,14 @@ font size by itself.
 | `justify-content` | empty spacer cells (`center`, `space-between`, ...) |
 | `align-items` / `align-self` | `valign` |
 | `flex-wrap: wrap`, rows wider than the screen (sliders, scrolling menus) | lines based on estimated widths (short texts by character count), one table per line |
-| `gap` | `cellspacing` |
+| `gap` | empty cells between flex items (cellspacing in grids) |
 | `grid-template-columns` (px, %, fr, `repeat()`, `minmax()`, `auto-fill`) | column widths; `fr` becomes a percentage |
 | `grid-column` / `grid-row` (`span`, line numbers) | `colspan` / `rowspan` |
 | `grid-template-areas` / `grid-area` | grid with `colspan` / `rowspan` |
 | `display: table` / `table-row` / `table-cell` | real table rows and cells |
 | `text-transform` | text converted to upper/lower case |
+| `grid-auto-flow: column` without a column template | one column per item |
+| `img` `width` in CSS | replaces the width attribute (often the file's size) |
 | `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (full width if `max-width` is wider than the screen) |
 | `padding` | `cellpadding` (average of the four sides; top and bottom count at most as much as left/right) |
 | horizontal `margin` / `padding` of inline elements | up to three `&nbsp;` |
@@ -91,7 +93,7 @@ python tools/testpages.py
 - No JavaScript: content that is only created by scripts is missing.
 - `flex-wrap` and `auto-fill` rely on estimated widths; without known widths
   everything stays on one line.
-- `gap` becomes `cellspacing` and therefore also appears at the table edges.
+- In grids, `gap` becomes `cellspacing` and therefore also appears at the table edges.
 - Margins between blocks are ignored; `padding` is a single value per box.
 - `position: absolute`, `transform`, floats of blocks (except as `align`) and
   pseudo-elements (`::before`) are not reproduced. Whether a positioned element

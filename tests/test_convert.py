@@ -96,7 +96,7 @@ def test_flex_wrap_with_calc_widths():
     doc = parse(page('.f { display: flex; flex-wrap: wrap; gap: 1.44rem } .t { width: calc(50% - 1.44rem/2) }',
                      f'<div class="f">{teasers}</div>'))
     lines = doc.find('.//table').findall('tr/td/table')
-    assert [len(line.findall('tr/td')) for line in lines] == [2, 2]
+    assert [len(line.findall('tr/td[@valign]')) for line in lines] == [2, 2]  # plus gap cells
     assert lines[0].find('tr/td').get('width') == '50%'
 
 
@@ -197,11 +197,11 @@ def test_flex_row_equal_columns():
     doc = parse(page('.f { display: flex; gap: 10px } .f > div { flex: 1 }',
                      '<div class="f"><div>a</div><div>b</div></div>'))
     table = doc.find('.//table')
-    assert table.get('cellspacing') == '10'
+    assert table.get('cellspacing') == '0'
     assert table.get('width') == '100%'
     cells = table.findall('tr/td')
-    assert len(cells) == 2
-    assert [c.get('width') for c in cells] == ['50%', '50%']
+    assert len(cells) == 3  # the gap is a cell of its own
+    assert [c.get('width') for c in cells] == ['50%', '10', '50%']
 
 
 def test_flex_sidebar_fixed_and_growing():
@@ -354,3 +354,26 @@ def test_empty_icon_boxes_are_removed():
 def test_padding_top_for_fixed_header_is_ignored():
     doc = parse(page('main { padding-top: 160px; background: #eee }', '<main>Text</main>'))
     assert doc.find('.//table').get('cellpadding') == '0'
+
+
+def test_image_width_from_css_not_file_size():
+    doc = parse(page('img { width: 100%; height: auto }', '<img src="a.jpg" width="4000" height="2000">'))
+    img = doc.find('.//img')
+    assert img.get('width') == '100%' and img.get('height') is None
+
+
+def test_link_without_decoration_from_inherit():
+    doc = parse(page('a { text-decoration: inherit }', '<p><a href="#">x</a></p>'))
+    assert 'text-decoration:none' in doc.find('.//a').get('style')
+
+
+def test_grid_column_flow_puts_items_side_by_side():
+    doc = parse(page('.g { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr) }',
+                     '<div class="g"><div>a</div><div>b</div><div>c</div></div>'))
+    assert len(doc.find('.//table/tr').findall('td')) == 3
+
+
+def test_slider_of_fixed_width_cards_wraps():
+    cards = ''.join(f'<li><div style="width: 13rem">Card {i}</div></li>' for i in range(8))
+    doc = parse(page('ul { display: flex; gap: 16px }', f'<ul>{cards}</ul>'))
+    assert len(doc.xpath('//table/tr/td/table')) > 1
