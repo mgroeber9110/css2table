@@ -22,8 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from css2table import convert  # noqa: E402
 from css2table.__main__ import file_loader  # noqa: E402
-from css2table.cascade import StyleResolver  # noqa: E402
-from css2table.convert import DROP  # noqa: E402
+from css2table.convert import DROP, Converter, parse  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'testpages')
 
@@ -47,25 +46,37 @@ def words(text):
     return Counter(re.findall(r'\w+', text.lower()))
 
 
-def visible_words(html, base_dir):
-    """Words that the CSS makes visible in the original (no scripts, display:none etc.)."""
-    doc = lxml.html.document_fromstring(html)
-    styles = StyleResolver(doc, load_stylesheet=file_loader(base_dir))
+def visible_words(html, base_dir, heuristics=True):
+    """Words that are visible in the original page.
+
+    With `heuristics`, the converter's own visibility rules apply (hidden
+    overlays, off-screen and screen-reader-only elements), so the coverage
+    measures what the layout conversion loses. Without, only display: none
+    and visibility: hidden count as hidden.
+    """
+    doc = parse(html)
+    converter = Converter(doc, load_stylesheet=file_loader(base_dir))
     parts = []
 
-    def walk(el, hidden):
-        s = styles.style(el)
-        hidden = hidden or el.tag in DROP or s['display'] == 'none' or s['visibility'] == 'hidden'
-        if not hidden and el.text:
+    def shown(el):
+        s = converter.style(el)
+        if heuristics:
+            return converter.visible(el, s)
+        return el.tag not in DROP and s['display'] != 'none' and s['visibility'] != 'hidden'
+
+    def walk(el):
+        if not shown(el):
+            return
+        if el.text:
             parts.append(el.text)
         for child in el:
             if isinstance(child.tag, str):
-                walk(child, hidden)
-            if not hidden and child.tail:
+                walk(child)
+            if child.tail:
                 parts.append(child.tail)
 
     body = doc.find('body')
-    walk(body if body is not None else doc, False)
+    walk(body if body is not None else doc)
     return words(' '.join(parts))
 
 
@@ -88,6 +99,7 @@ def check(path, out_dir=None):
         with open(os.path.join(out_dir, os.path.basename(path)), 'w', encoding='utf-8') as f:
             f.write(result)
     original = visible_words(html, base_dir)
+    css_visible = sum(visible_words(html, base_dir, heuristics=False).values())
     converted = output_words(result)
     kept = sum((original & converted).values())
     return {
@@ -96,7 +108,10 @@ def check(path, out_dir=None):
         'size_in': len(html),
         'size_out': len(result.encode('utf-8')),
         'tables': result.count('<table'),
+        'images': (html.count(b'<img'), result.count('<img')),
         'text_coverage': kept / max(1, sum(original.values())),
+        # words dropped as hidden by the heuristics (skip links, menus, ...)
+        'text_hidden': 1 - sum(original.values()) / max(1, css_visible),
         'html': result,
     }
 
@@ -108,11 +123,12 @@ def main(argv=None):
         print(f'No test pages found in {root}.')
         return 1
     out_dir = os.path.join(root, 'out')
-    print(f'{"Page":40} {"Time":>6} {"KB in":>7} {"KB out":>7} {"Tables":>8} {"Text":>6}')
+    print(f'{"Page":40} {"Time":>6} {"KB in":>7} {"KB out":>7} {"Tables":>8} {"Img out/in":>10} {"Text":>6} {"Hidden":>6}')
     for path in pages:
         r = check(path, out_dir)
         print(f'{r["page"]:40} {r["seconds"]:5.1f}s {r["size_in"] // 1024:7} '
-              f'{r["size_out"] // 1024:7} {r["tables"]:8} {r["text_coverage"]:6.0%}')
+              f'{r["size_out"] // 1024:7} {r["tables"]:8} {"%d/%d" % r["images"][::-1]:>10} '
+              f'{r["text_coverage"]:6.0%} {r["text_hidden"]:6.0%}')
     print(f'Output in {out_dir}')
     return 0
 

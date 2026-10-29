@@ -3,7 +3,7 @@ import pytest
 
 from css2table import convert
 from css2table.cascade import StyleResolver
-from css2table.values import color, font_face, media_matches
+from css2table.values import color, font_face, length, media_matches
 
 
 def page(css, body):
@@ -66,6 +66,40 @@ def test_media_queries():
     assert r.style(doc.find('.//p'))['color'] == 'red'
 
 
+def test_revert_and_all():
+    doc, r = styles('*:where(:not(html)) { all: unset; display: revert } h1 { font-size: 30px }',
+                    '<div><h1>t</h1><span>u</span></div>')
+    div, h1, span = doc.find('.//div'), doc.find('.//h1'), doc.find('.//span')
+    assert r.style(div)['display'] == 'block'
+    assert r.style(span)['display'] == 'inline'
+    assert r.style(h1)['display'] == 'block'
+    assert r.style(h1).font_size == 30
+    assert r.style(h1)['font-weight'] == 'normal'  # reset by `all: unset`
+
+
+@pytest.mark.parametrize('value, expected', [
+    ('calc(50% - 1.44rem/2)', ('%', 50.0)),
+    ('calc((100% - 20px) / 4)', ('%', 25.0)),
+    ('calc(100px + 2em)', ('px', 132.0)),
+    ('calc(2 * 10px)', ('px', 20.0)),
+    ('min(300px, 600px)', ('px', 300.0)),
+    ('min(100%, 600px)', ('%', 100.0)),
+    ('clamp(10px, 50px, 30px)', ('px', 30.0)),
+    ('calc(10px +)', None),
+])
+def test_math_functions(value, expected):
+    assert length(value) == expected
+
+
+def test_flex_wrap_with_calc_widths():
+    teasers = ''.join(f'<div class="t">{i}</div>' for i in range(4))
+    doc = parse(page('.f { display: flex; flex-wrap: wrap; gap: 1.44rem } .t { width: calc(50% - 1.44rem/2) }',
+                     f'<div class="f">{teasers}</div>'))
+    lines = doc.find('.//table').findall('tr/td/table')
+    assert [len(line.findall('tr/td[@valign]')) for line in lines] == [2, 2]  # plus gap cells
+    assert lines[0].find('tr/td').get('width') == '50%'
+
+
 def test_values():
     assert color('rgb(255, 0, 0)') == '#ff0000'
     assert color('rgba(0, 0, 0, 0.5)') == '#808080'
@@ -85,11 +119,51 @@ def test_output_is_html4_without_scripts_and_classes():
         assert forbidden not in out
 
 
+def test_images_in_picture_are_kept():
+    out = parse(page('', '<picture><source type="image/webp" srcset="a.webp 400w">'
+                         '<img src="a.jpg" alt="Photo" width="400"></picture><p>after</p>'))
+    img = out.find('.//img')
+    assert img is not None
+    assert (img.get('src'), img.get('alt'), img.get('width')) == ('a.jpg', 'Photo', '400')
+    assert out.find('.//source') is None
+    assert 'after' in out.find('.//body').text_content()
+
+
+@pytest.mark.parametrize('srcset, expected', [
+    ('s.jpg 320w, m.jpg 768w, l.jpg 1920w', 'm.jpg'),
+    ('l.jpg 1920w, xl.jpg 3000w', 'l.jpg'),
+    ('a.jpg 2x, b.jpg 1x', 'b.jpg'),
+])
+def test_image_without_src_uses_srcset(srcset, expected):
+    out = parse(page('', f'<img srcset="{srcset}" alt="x">'))
+    assert out.find('.//img').get('src') == expected
+
+
 def test_hidden_and_fixed_elements_are_dropped():
-    out = convert(page('.cookie { position: fixed } .no { display: none }',
+    out = convert(page('.cookie { position: fixed; bottom: 0 } .no { display: none }',
                        '<div class="cookie">Cookie</div><p class="no">gone</p><p hidden>also</p><p>here</p>'))
     assert 'Cookie' not in out and 'gone' not in out and 'also' not in out
     assert 'here' in out
+
+
+def test_fixed_header_stays_in_flow():
+    out = convert(page('header { position: fixed; top: 0; width: 100% } .top { position: fixed; bottom: 2rem }'
+                       ' .modal { position: fixed; inset: 0 }',
+                       '<header>Logo</header><a class="top" href="#">Up</a><div class="modal">Dialog</div><p>Text</p>'))
+    assert 'Logo' in out and 'Text' in out
+    assert 'Up' not in out and 'Dialog' not in out
+
+
+def test_offscreen_elements_are_dropped():
+    css = ('.skip { position: absolute; left: -10000px } .menu { position: fixed; top: 0; left: -300px; width: 300px }'
+           ' .slide { position: absolute; transform: translate(100%) } .sr { position: absolute; clip: rect(0 0 0 0) }'
+           ' .fade { position: absolute; opacity: 0 }')
+    body = ('<a class="skip" href="#c">Skip</a><div class="menu">Menu</div><div class="slide">Slide</div>'
+            '<span class="sr">Hidden</span><span class="fade">Faded</span><p id="c">Content</p>')
+    out = convert(page(css, body))
+    for gone in ('Skip', 'Menu', 'Slide', 'Hidden', 'Faded'):
+        assert gone not in out
+    assert 'Content' in out
 
 
 def test_colors_become_attributes_and_font_tags():
@@ -123,11 +197,11 @@ def test_flex_row_equal_columns():
     doc = parse(page('.f { display: flex; gap: 10px } .f > div { flex: 1 }',
                      '<div class="f"><div>a</div><div>b</div></div>'))
     table = doc.find('.//table')
-    assert table.get('cellspacing') == '10'
+    assert table.get('cellspacing') == '0'
     assert table.get('width') == '100%'
     cells = table.findall('tr/td')
-    assert len(cells) == 2
-    assert [c.get('width') for c in cells] == ['50%', '50%']
+    assert len(cells) == 3  # the gap is a cell of its own
+    assert [c.get('width') for c in cells] == ['50%', '10', '50%']
 
 
 def test_flex_sidebar_fixed_and_growing():
@@ -211,6 +285,23 @@ def test_grid_template_areas():
     assert 'M' in main.text_content()
 
 
+
+def test_inline_spacing_becomes_nbsp():
+    doc = parse(page('a { margin: 0 8px }', '<p><a href="#">A</a><a href="#">B</a></p>'))
+    first = doc.find('.//a')
+    assert first.text_content().startswith('\u00a0') and first.text_content().endswith('\u00a0')
+
+
+def test_webkit_box_is_block():
+    doc = parse(page('.h { display: -webkit-box }', '<h3><span>Top</span><span class="h">Head</span></h3>'))
+    assert doc.find('.//div').text_content().strip() == 'Head'
+
+
+def test_wide_menu_row_wraps():
+    links = ''.join(f'<li>Menu entry {i}</li>' for i in range(12))
+    doc = parse(page('ul { display: flex; white-space: nowrap }', f'<ul>{links}</ul>'))
+    assert len(doc.xpath('//table/tr/td/table')) > 1  # one table per line
+
 @pytest.mark.parametrize('width, expected', [(800, 4), (400, 2)])
 def test_grid_auto_fill(width, expected):
     cards = ''.join(f'<div>{i}</div>' for i in range(8))
@@ -227,3 +318,62 @@ def test_example_pages_convert():
     for name in ('grid.html', 'flex.html'):
         out = convert((examples / name).read_bytes(), load_stylesheet=file_loader(str(examples)))
         assert '<table' in out and '<script' not in out
+
+
+def test_rem_uses_root_font_size():
+    doc, r = styles('html { font-size: 62.5% } p { font-size: 2rem }', '<p>t</p>')
+    assert r.style(doc.find('.//p')).font_size == 20
+
+
+def test_slider_wider_than_screen_wraps():
+    slides = ''.join(f'<div style="width: 1024px">Slide {i}</div>' for i in range(3))
+    doc = parse(page('.s { display: flex }', f'<div class="s">{slides}</div>'))
+    assert all(td.get('width') in (None, '100%') for td in doc.iter('td'))
+    assert len(doc.xpath('//table/tr/td/table')) == 3
+
+
+def test_css_table_cells_become_one_row():
+    doc = parse(page('ul { display: table } li { display: table-cell; white-space: nowrap }',
+                     '<ul><li>A</li><li>B</li><li>C</li></ul>'))
+    rows = [tr for tr in doc.iter('tr') if len(tr.findall('td')) == 3]
+    assert rows and rows[0].find('td').get('nowrap') is not None
+
+
+def test_text_transform_uppercase():
+    doc = parse(page('.k { text-transform: uppercase }', '<p class="k">Meran <b>heute</b></p>'))
+    assert 'MERAN HEUTE' in doc.find('.//body').text_content()
+
+
+def test_empty_icon_boxes_are_removed():
+    doc = parse(page('.i { padding: 10px; background: none }',
+                     '<div class="i"><i></i></div><p>Text</p>'))
+    assert len(doc.findall('.//table')) == 0
+    assert 'Text' in doc.find('.//body').text_content()
+
+
+def test_padding_top_for_fixed_header_is_ignored():
+    doc = parse(page('main { padding-top: 160px; background: #eee }', '<main>Text</main>'))
+    assert doc.find('.//table').get('cellpadding') == '0'
+
+
+def test_image_width_from_css_not_file_size():
+    doc = parse(page('img { width: 100%; height: auto }', '<img src="a.jpg" width="4000" height="2000">'))
+    img = doc.find('.//img')
+    assert img.get('width') == '100%' and img.get('height') is None
+
+
+def test_link_without_decoration_from_inherit():
+    doc = parse(page('a { text-decoration: inherit }', '<p><a href="#">x</a></p>'))
+    assert 'text-decoration:none' in doc.find('.//a').get('style')
+
+
+def test_grid_column_flow_puts_items_side_by_side():
+    doc = parse(page('.g { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr) }',
+                     '<div class="g"><div>a</div><div>b</div><div>c</div></div>'))
+    assert len(doc.find('.//table/tr').findall('td')) == 3
+
+
+def test_slider_of_fixed_width_cards_wraps():
+    cards = ''.join(f'<li><div style="width: 13rem">Card {i}</div></li>' for i in range(8))
+    doc = parse(page('ul { display: flex; gap: 16px }', f'<ul>{cards}</ul>'))
+    assert len(doc.xpath('//table/tr/td/table')) > 1

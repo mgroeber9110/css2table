@@ -80,8 +80,11 @@ TAG_ATTRS = {
 INPUT_TYPES = {'text', 'password', 'checkbox', 'radio', 'submit', 'reset',
                'file', 'hidden', 'image', 'button'}
 
-BLOCK_DISPLAYS = {'block', 'list-item', 'flex', 'grid', 'table', 'flow-root'}
-LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid'}
+# -webkit-box is mostly used for line clamping (-webkit-line-clamp) on blocks
+NBSP = '\u00a0'
+BLOCK_DISPLAYS = {'block', 'list-item', 'flex', 'grid', 'table', 'flow-root', '-webkit-box'}
+LAYOUT_DISPLAYS = {'flex', 'inline-flex', 'grid', 'inline-grid', 'table', 'inline-table'}
+ROW_GROUPS = {'table-header-group', 'table-row-group', 'table-footer-group'}
 VALIGN = {'center': 'middle', 'flex-end': 'bottom', 'end': 'bottom',
           'self-end': 'bottom', 'baseline': 'baseline'}
 
@@ -131,6 +134,23 @@ def make(tag, **attrs):
     for k, v in attrs.items():
         node.set(k, str(v))
     return node
+
+
+def text_width(text, font_size):
+    """Rough width of a short text: average glyph width plus some spacing."""
+    return len(text) * font_size * 0.55 + 2 * font_size
+
+
+def transform(text, s):
+    """Apply text-transform (uppercase labels are common in teasers)."""
+    mode = s['text-transform']
+    if mode == 'uppercase':
+        return text.upper()
+    if mode == 'lowercase':
+        return text.lower()
+    if mode == 'capitalize':
+        return re.sub(r'\b\w', lambda m: m.group().upper(), text)
+    return text
 
 
 def add_text(node, text):
@@ -197,26 +217,43 @@ class Converter:
         if s['display'] == 'none' or s['visibility'] in ('hidden', 'collapse'):
             return False
         position = s['position']
-        if position == 'fixed':
+        if position in ('absolute', 'fixed') and (self.offscreen(s) or s['opacity'] == '0'):
             return False
-        if position == 'absolute':
-            # typical "screen reader only" elements
-            w, h = px(s['width'], s.font_size), px(s['height'], s.font_size)
-            if (w is not None and w <= 1) or (h is not None and h <= 1):
-                return False
+        if position == 'fixed' and (s['top'] in (None, 'auto') or s['bottom'] not in (None, 'auto')):
+            # Overlays anchored to the bottom or covering the screen: cookie
+            # banners, "back to top" buttons, modal dialogs
+            return False
+        # Anything else that is fixed (typically a header at the top) and
+        # absolutely positioned stays in the normal flow.
         return True
 
+    def offscreen(self, s):
+        """Is a positioned element moved out of view (skip links, screen reader text, menus)?"""
+        fs = s.font_size
+        w, h = px(s['width'], fs), px(s['height'], fs)
+        if (w is not None and w <= 1) or (h is not None and h <= 1):
+            return True
+        for side, size in (('top', h), ('left', w), ('right', w)):
+            offset = px(s[side], fs)
+            # far outside, or moved out by at least its own size (off-canvas menus)
+            if offset is not None and (offset <= -999 or (size and offset <= -size)):
+                return True
+        if re.search(r'translate[xy]?\(\s*-?100%', (s['transform'] or '').lower()):
+            return True
+        return 'rect(0' in (s['clip'] or '').replace(' ', '') or 'inset(50%' in (s['clip-path'] or '')
+
     def emit_children(self, el, out, avail, ctx, pre=False):
-        self.add_source_text(out, el.text, pre)
+        s = self.style(el)
+        self.add_source_text(out, el.text, s, pre)
         for child in el:
             if isinstance(child.tag, str):
                 self.emit(child, out, avail, ctx)
-            self.add_source_text(out, child.tail, pre)
+            self.add_source_text(out, child.tail, s, pre)
 
-    def add_source_text(self, out, text, pre=False):
+    def add_source_text(self, out, text, s, pre=False):
         if not text or (out.tag in NO_TEXT and not text.strip()):
             return
-        add_text(out, text if pre else collapse(text))
+        add_text(out, transform(text if pre else collapse(text), s))
 
     def emit(self, el, out, avail, ctx, boxed=False, shrink=False):
         s = self.style(el)
@@ -227,13 +264,32 @@ class Converter:
         if tag in TRANSPARENT or display == 'contents':
             self.emit_children(el, out, avail, ctx)
             return
-        if display in LAYOUT_DISPLAYS:
+        if display in LAYOUT_DISPLAYS and tag != 'table':
             node = self.layout(el, s, avail, shrink)
         elif not boxed and display in BLOCK_DISPLAYS and self.needs_box(tag, s):
             node = self.box(el, s, avail, ctx, shrink)
         else:
             node = self.plain(el, s, avail, ctx)
+            if display not in BLOCK_DISPLAYS:
+                self.inline_space(node, s)
         out.append(node)
+
+    def inline_space(self, node, s):
+        """Horizontal margin and padding of inline elements as non-breaking spaces.
+
+        Without this, menu links that are spaced only by CSS run together.
+        """
+        def spaces(side):
+            n = sum(px(s[prop + side], s.font_size) or 0 for prop in ('margin-', 'padding-'))
+            return NBSP * min(3, round(n / (s.font_size * 0.3)))
+        left, right = spaces('left'), spaces('right')
+        if left:
+            node.text = left + (node.text or '')
+        if right:
+            if len(node):
+                node[-1].tail = (node[-1].tail or '') + right
+            else:
+                node.text = (node.text or '') + right
 
     def out_tag(self, el, s):
         tag = el.tag.lower()
@@ -255,11 +311,29 @@ class Converter:
             if key in allowed:
                 node.set(key, value)
         if tag == 'img' and not node.get('src'):
-            src = el.get('data-src') or (el.get('srcset') or el.get('data-srcset') or '').split(' ')[0]
+            src = el.get('data-src') or self.pick_srcset(el.get('srcset') or el.get('data-srcset'))
             if src:
                 node.set('src', src)
         if tag == 'input' and (node.get('type') or 'text').lower() not in INPUT_TYPES:
             node.set('type', 'text')
+
+    def pick_srcset(self, srcset):
+        """Pick an image from a srcset: the widest that fits the screen, else the lowest density."""
+        widths, densities = [], []
+        for entry in (srcset or '').split(','):
+            parts = entry.split()
+            if not parts:
+                continue
+            descriptor = parts[1] if len(parts) > 1 else '1x'
+            try:
+                value = float(descriptor[:-1])
+            except ValueError:
+                continue
+            (widths if descriptor.endswith('w') else densities).append((value, parts[0]))
+        if widths:
+            fitting = [w for w in widths if w[0] <= self.viewport]
+            return max(fitting)[1] if fitting else min(widths)[1]
+        return min(densities)[1] if densities else None
 
     def plain(self, el, s, avail, ctx):
         """Keep the element with the same (or a similar HTML4) tag."""
@@ -276,7 +350,11 @@ class Converter:
         decoration = s['text-decoration'] or s['text-decoration-line']
         if decoration:
             extra.append('text-decoration:' + decoration.split()[0])
-        if tag in ('img', 'table') and not node.get('width'):
+        elif tag == 'a' and el.get('href'):
+            extra.append('text-decoration:none')  # e.g. text-decoration: inherit from a block
+        if tag == 'img':
+            self.image_size(node, s, avail)
+        elif tag == 'table' and not node.get('width'):
             width = length(s['width'], s.font_size)
             if width:
                 node.set('width', str(round(width[1])) if width[0] == 'px' else pct(width[1]))
@@ -295,6 +373,28 @@ class Converter:
             wrapper.append(node)
             return wrapper
         return node
+
+    def image_size(self, node, s, avail):
+        """Image width from CSS; the width attribute is often the file's size."""
+        width = length(s['width'], s.font_size)
+        if width and width[1] > 0:
+            if width[0] == 'px' and width[1] > avail:
+                width = ('%', 100.0)
+            node.set('width', str(round(width[1])) if width[0] == 'px' else pct(width[1]))
+            height = length(s['height'], s.font_size)
+            if height and height[0] == 'px':
+                node.set('height', str(round(height[1])))
+            elif 'height' in node.attrib:
+                del node.attrib['height']  # keep the aspect ratio
+            return
+        try:
+            attr = int(node.get('width', ''))
+        except ValueError:
+            return
+        if attr > avail and s['max-width'] not in (None, 'none'):
+            # max-width: 100% shrinks large images to the container
+            node.set('width', '100%')
+            node.attrib.pop('height', None)
 
     def apply_text(self, node, new, old, extra=None):
         """Express font differences from `old` as a style attribute and <font>.
@@ -348,7 +448,12 @@ class Converter:
     def padding(self, s, avail):
         values = [px(s['padding-' + side], s.font_size, avail) or 0
                   for side in ('top', 'right', 'bottom', 'left')]
-        return round(sum(values) / 4)
+        # Average of the sides, with top and bottom limited to the horizontal
+        # padding: a large padding-top is often room for a fixed header, which
+        # the converted page shows in the normal flow
+        top, right, bottom, left = (max(0, v) for v in values)
+        side = max(left, right)
+        return round((min(top, side) + right + min(bottom, side) + left) / 4)
 
     def border(self, s):
         if s['border-style'] in ('none', 'hidden'):
@@ -422,7 +527,43 @@ class Converter:
     def layout(self, el, s, avail, shrink=False):
         if s['display'] in ('grid', 'inline-grid'):
             return self.grid(el, s, avail, shrink)
+        if s['display'] in ('table', 'inline-table'):
+            return self.css_table(el, s, avail, shrink)
         return self.flex(el, s, avail, shrink)
+
+    def table_cell(self, tr, item, container, avail):
+        td = sub(tr, 'td', valign='top')
+        if item.el is not None and item.style['white-space'] == 'nowrap':
+            td.set('nowrap', 'nowrap')
+        self.fill_cell(td, item, container, avail, shrink=True)
+
+    def css_table(self, el, s, avail, shrink=False):
+        """display: table on other elements (e.g. menus of table-cell items)."""
+        root, table, cavail = self.frame(s, avail, shrink or s['display'] == 'inline-table')
+        spacing = (s['border-spacing'] or '0').split()[0]
+        if s['border-collapse'] != 'collapse':
+            table.set('cellspacing', str(round(px(spacing, s.font_size) or 0)))
+        tr = None
+        for item in self.table_items(el):
+            if item.el is not None and item.style['display'] == 'table-row':
+                tr = sub(table, 'tr')
+                for cell in self.items(item.el):
+                    self.table_cell(tr, cell, item.style, cavail)
+                tr = None
+                continue
+            if tr is None:
+                tr = sub(table, 'tr')  # cells without a row form an anonymous row
+            self.table_cell(tr, item, s, cavail)
+        return root
+
+    def table_items(self, el):
+        out = []
+        for item in self.items(el):
+            if item.el is not None and item.style['display'] in ROW_GROUPS:
+                out += self.table_items(item.el)
+            else:
+                out.append(item)
+        return out
 
     def frame(self, s, avail, shrink):
         """Table for a layout container; nested when it has padding."""
@@ -466,7 +607,7 @@ class Converter:
         """Write the content of a flex or grid item into a table cell."""
         if item.el is None:
             holder, _ = self.apply_text(td, text_ctx(container), DEFAULT_CTX)
-            add_text(holder, collapse(item.text).strip())
+            add_text(holder, transform(collapse(item.text).strip(), item.style))
             return
         el, s = item.el, item.style
         if s['display'] not in LAYOUT_DISPLAYS and el.tag in CELL_MERGE:
@@ -508,16 +649,20 @@ class Converter:
 
         gap = self.gap(s, 'column-gap', cavail)
         lines = [items]
-        if s['flex-wrap'] in ('wrap', 'wrap-reverse'):
+        if s['flex-wrap'] in ('wrap', 'wrap-reverse') or self.overflows(items, cavail, gap):
+            # Carousels (sliders) are rows wider than the screen that scroll
+            # with JavaScript; a legacy browser shows their items wrapped instead
             lines = self.flex_lines(items, cavail, gap)
         if len(lines) == 1:
-            table.set('cellspacing', str(gap))
             self.flex_row(table, items, s, cavail, gap)
         else:
             # One table per line, so the column widths are independent
-            for line in lines:
+            row_gap = self.gap(s, 'row-gap', cavail)
+            for i, line in enumerate(lines):
+                if i and row_gap:
+                    sub(sub(table, 'tr'), 'td', height=str(row_gap))
                 td = sub(sub(table, 'tr'), 'td')
-                row = sub(td, 'table', width='100%', cellspacing=gap, cellpadding=0, border=0)
+                row = sub(td, 'table', width='100%', cellspacing=0, cellpadding=0, border=0)
                 self.flex_row(row, line, s, cavail, gap)
         return root
 
@@ -534,20 +679,61 @@ class Converter:
             grow = 0.0
         return size, grow
 
+    def item_width(self, item, avail):
+        """Estimated width of a flex item in pixels, or None if unknown.
+
+        Uses width or flex-basis; for short texts (menu links, tags), the
+        width is estimated from the number of characters.
+        """
+        if item.el is None:
+            return None
+        size = self.flex_basis(item.style)[0]
+        if size is not None:
+            return size[1] if size[0] == 'px' else size[1] * avail / 100
+        inner = self.wrapped_width(item.el)
+        if inner is not None:
+            return inner
+        text = collapse(self.text_of(item)).strip()
+        if not text or len(text) > SHORT_TEXT:
+            return None
+        return text_width(text, item.style.font_size)
+
+    def wrapped_width(self, el, depth=3):
+        """Pixel width of the only child, e.g. a card with a fixed width in an <li>."""
+        children = [c for c in el if isinstance(c.tag, str) and self.visible(c, self.style(c))]
+        if depth == 0 or len(children) != 1 or (el.text or '').strip() or (children[0].tail or '').strip():
+            return None
+        size = length(self.style(children[0])['width'], self.style(children[0]).font_size)
+        if size is not None:
+            return size[1] if size[0] == 'px' else None
+        return self.wrapped_width(children[0], depth - 1)
+
+    def overflows(self, items, avail, gap):
+        """Are the items of a flex row clearly wider than the container?"""
+        total = 0
+        for item in items:
+            w = self.item_width(item, avail)
+            if w is None:
+                return False
+            total += w
+        return len(items) > 1 and total + gap * (len(items) - 1) > avail * 1.1
+
     def flex_lines(self, items, avail, gap):
         """Distribute flex-wrap items over lines based on their estimated widths."""
-        widths = []
-        for item in items:
-            size = self.flex_basis(item.style)[0] if item.el is not None else None
-            if size is None:
-                return [items]  # width unknown: everything on one line
-            widths.append(size[1] if size[0] == 'px' else size[1] * avail / 100)
         lines, used = [[]], 0
-        for item, w in zip(items, widths):
-            if lines[-1] and used + gap + w > avail + 0.5:
+        for item in items:
+            w = self.item_width(item, avail)
+            if w is None:
+                return [items]  # width unknown: everything on one line
+            # Percentage widths usually already leave room for the gap,
+            # e.g. calc(50% - 1rem), so the gap only counts for other widths
+            size = self.flex_basis(item.style)[0]
+            w = min(w, avail)
+            spacing = gap if lines[-1] and (size is None or size[0] == 'px') else 0
+            if lines[-1] and used + spacing + w > avail + 0.5:
                 lines.append([])
-                used = 0
-            used += (gap if lines[-1] else 0) + w
+                used, spacing = 0, 0
+            used += spacing + w
             lines[-1].append(item)
         return lines
 
@@ -558,7 +744,7 @@ class Converter:
         def size_px(size):
             if size is None:
                 return 0
-            return size[1] if size[0] == 'px' else size[1] * avail / 100
+            return min(size[1] if size[0] == 'px' else size[1] * avail / 100, avail)
 
         base = sum(size_px(size) for size, _ in sizes)
         free = max(0.0, avail - base - gap * (len(line) - 1))
@@ -574,16 +760,24 @@ class Converter:
                 width = pct((size_px(size) + free * grow / total_grow) * 100 / inner)
                 flexible = True
             elif size:
-                width = str(round(size[1])) if size[0] == 'px' else pct(size[1])
+                if size[0] == 'px' and size[1] > avail:
+                    width = '100%'  # wider than the container (e.g. a slide sized by JavaScript)
+                else:
+                    width = str(round(size[1])) if size[0] == 'px' else pct(size[1])
             elif len(collapse(self.text_of(item)).strip()) <= SHORT_TEXT:
-                nowrap = True
+                # Short labels stay on one line if they fit; not images, whose
+                # size is unknown
+                text = collapse(self.text_of(item)).strip()
+                estimate = text_width(text, item.style.font_size)
+                nowrap = ((item.el is None or next(item.el.iter('img'), None) is None)
+                          and estimate <= avail / len(line))
             else:
                 flexible = True  # long text: the browser distributes the space
             cells.append((item, width, nowrap, grow))
 
         justify = s['justify-content'] or 'normal'
         n = len(cells)
-        if flexible or table.get('width') is None:
+        if flexible or table.get('width') is None or used_pct >= 99:
             pattern = [False] * n  # no free space to distribute
         elif justify == 'center':
             pattern = [True] + [False] * n + [True]
@@ -600,12 +794,19 @@ class Converter:
 
         valign_default = VALIGN.get(s['align-items'], 'top')
         cells = iter(cells)
+        first = True
         for is_spacer in pattern:
             if is_spacer:
                 td = sub(tr, 'td')
                 if spacer_width >= 1:
                     td.set('width', pct(spacer_width))
                 continue
+            if gap and not first:
+                # A cell instead of cellspacing, which would also add the gap
+                # above, below and at the edges. Spaces keep it from collapsing
+                # next to a spacer cell with width=100%.
+                sub(tr, 'td', width=str(gap)).text = NBSP * max(1, round(gap / 4))
+            first = False
             item, width, nowrap, grow = next(cells)
             valign = valign_default
             if item.el is not None and item.style['align-self'] not in ('auto', None):
@@ -628,10 +829,18 @@ class Converter:
         root, table, cavail = self.frame(s, avail, shrink or s['display'] == 'inline-grid')
         column_gap = self.gap(s, 'column-gap', cavail)
         table.set('cellspacing', str(column_gap or self.gap(s, 'row-gap', cavail)))
-        tracks = parse_tracks(s['grid-template-columns'], cavail, column_gap)
+        template = s['grid-template-columns']
+        items = self.items(el)
+        if ('column' in (s['grid-auto-flow'] or '') and template in (None, 'none')
+                and s['grid-template-rows'] in (None, 'none') and items):
+            # Without rows, column flow puts every item in a column of its own
+            template = 'repeat(%d, %s)' % (len(items), s['grid-auto-columns'] or '1fr')
+            if template.endswith('auto)'):
+                template = 'repeat(%d, 1fr)' % len(items)
+        tracks = parse_tracks(template, cavail, column_gap)
         areas = parse_areas(s['grid-template-areas'])
         ncols = max(len(tracks), max((len(r) for r in areas), default=0), 1)
-        placed, ncols = place_items(self.items(el), ncols, areas)
+        placed, ncols = place_items(items, ncols, areas)
         tracks += [{'kind': 'auto'}] * (ncols - len(tracks))
         widths = track_widths(tracks, cavail, column_gap)
 
@@ -879,6 +1088,61 @@ def _newlines(node):
             el.text = '\n'
 
 
+# Void elements that are new in HTML5. libxml2's HTML parser does not know
+# they are empty and nests the following content inside them.
+HTML5_VOID = ('source', 'track', 'wbr', 'embed', 'param', 'keygen')
+
+
+def parse(html):
+    """Parse HTML and move content wrongly nested in HTML5 void elements back out.
+
+    Without this, the <img> in <picture><source><img></picture> would end up
+    inside <source> and be dropped with it.
+    """
+    doc = lxml.html.document_fromstring(html)
+    for el in list(doc.iter(*HTML5_VOID)):
+        children = list(el)
+        if not children and not el.text:
+            continue
+        parent = el.getparent()
+        tail, el.tail, el.text = el.tail, el.text, None
+        index = parent.index(el)
+        for offset, child in enumerate(children, 1):
+            parent.insert(index + offset, child)
+        if children:
+            children[-1].tail = (children[-1].tail or '') + (tail or '')
+        else:
+            el.tail = (el.tail or '') + (tail or '')
+    return doc
+
+
+# Elements that show something without containing text
+CONTENT_TAGS = {'img', 'input', 'select', 'textarea', 'button', 'hr', 'object', 'embed', 'applet'}
+PRUNABLE = {'div', 'span', 'table', 'font', 'b', 'i', 'u', 'a', 'p', 'center', 'small', 'big'}
+
+
+def _prune(node):
+    """Remove empty boxes, e.g. icons drawn with icon fonts or ::before.
+
+    They would only leave blank lines and empty table cells behind.
+    """
+    if node is None:
+        return
+    for el in reversed(list(node.iter(*PRUNABLE))):
+        if el.getparent() is None or el.get('bgcolor') or el.get('id') or el.get('name'):
+            continue
+        if (''.join(el.itertext()).replace(NBSP, ' ').strip()
+                or any(True for _ in el.iter(*CONTENT_TAGS))):
+            continue
+        parent, prev = el.getparent(), el.getprevious()
+        if el.tail:
+            if prev is not None:
+                prev.tail = (prev.tail or '') + el.tail
+            else:
+                parent.text = (parent.text or '') + el.tail
+        parent.remove(el)
+
+
 def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     """Convert HTML text (str or bytes) into HTML 4.01 with a table layout.
 
@@ -886,10 +1150,11 @@ def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     base_url: relative links and images are made absolute against it.
     load_stylesheet: function url -> CSS text (or None) for <link>/@import.
     """
-    doc = lxml.html.document_fromstring(html)
+    doc = parse(html)
     if base_url:
         doc.make_links_absolute(base_url, resolve_base_href=True)
     out = Converter(doc, viewport_width, load_stylesheet).build()
+    _prune(out.find('body'))
     _newlines(out)
     result = lxml.html.tostring(out, doctype=DOCTYPE, encoding='unicode', method='html')
     meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'

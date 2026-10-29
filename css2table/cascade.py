@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 import cssselect2
 import tinycss2
 
-from .values import font_size, media_matches, parts, tokens, first_color
+from .values import ROOT_FONT_SIZE, first_color, font_size, media_matches, parts, tokens
 
 UA_CSS = """
 head, script, style, link, meta, title, template, base, [hidden], area,
@@ -45,13 +45,13 @@ center, th { text-align: center }
 """
 
 INHERITED = {'color', 'font-family', 'font-size', 'font-weight', 'font-style',
-             'text-align', 'white-space', 'visibility', 'list-style-type'}
+             'text-align', 'text-transform', 'white-space', 'visibility', 'list-style-type'}
 
 INITIAL = {
     'display': 'inline', 'position': 'static', 'float': 'none',
     'visibility': 'visible', 'color': 'black', 'font-family': 'Times New Roman',
     'font-size': '16px', 'font-weight': 'normal', 'font-style': 'normal',
-    'text-align': 'left', 'white-space': 'normal', 'list-style-type': 'disc',
+    'text-align': 'left', 'text-transform': 'none', 'white-space': 'normal', 'list-style-type': 'disc',
     'flex-direction': 'row', 'flex-wrap': 'nowrap', 'flex-grow': '0',
     'flex-basis': 'auto', 'justify-content': 'normal', 'align-items': 'normal',
     'align-self': 'auto', 'width': 'auto', 'max-width': 'none',
@@ -154,6 +154,9 @@ def expand(name, value):
             p.append('auto')
         return [('grid-row-start', p[0]), ('grid-column-start', p[1]),
                 ('grid-row-end', p[2]), ('grid-column-end', p[3])]
+    if name == 'inset':
+        sides = _four(value)
+        return list(zip(('top', 'right', 'bottom', 'left'), sides)) if sides else []
     if name == 'place-items':
         p = parts(value)
         return [('align-items', p[0])] if p else []
@@ -276,6 +279,7 @@ class StyleResolver:
             self._import(href, base)
 
     def _compute(self, root):
+        ROOT_FONT_SIZE.set(16.0)  # `rem` on the root element itself uses the initial size
         wrapper = cssselect2.ElementWrapper.from_html_root(root)
         for w in wrapper.iter_subtree():
             el = w.etree_element
@@ -290,6 +294,8 @@ class StyleResolver:
             candidates.sort(key=lambda c: c[0])
             parent = el.getparent()
             self.computed[el] = self._resolve(candidates, self.computed.get(parent))
+            if parent is None:
+                ROOT_FONT_SIZE.set(self.computed[el].font_size)
 
     def _resolve(self, candidates, parent):
         style = Style()
@@ -302,12 +308,29 @@ class StyleResolver:
         style.custom = custom
 
         declared = {}
-        for _, name, value in candidates:
+        user_agent = {}  # declarations from the UA stylesheet, for `revert`
+        for (_, origin, *_), name, value in candidates:
             if name.startswith('--'):
                 continue
             value = substitute(value, custom)
+            keyword = value.lower()
+            if name == 'all':
+                # Reset everything declared so far (CSS resets often use `all: unset`)
+                if keyword in ('revert', 'revert-layer'):
+                    declared = dict(user_agent)
+                elif keyword in ('initial', 'unset', 'inherit'):
+                    declared = {}
+                continue
             for longhand, v in expand(name, value):
+                if v.lower() in ('revert', 'revert-layer'):
+                    if longhand in user_agent:
+                        declared[longhand] = user_agent[longhand]
+                    else:
+                        declared.pop(longhand, None)
+                    continue
                 declared[longhand] = v
+                if origin == 0:
+                    user_agent[longhand] = v
 
         parent_size = parent.font_size if parent is not None else 16.0
         for name in INHERITED:
