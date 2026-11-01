@@ -83,7 +83,8 @@ def visible_words(html, base_dir, heuristics=True):
 def output_words(html):
     doc = lxml.html.document_fromstring(html)
     body = doc.find('body')
-    return words((body if body is not None else doc).text_content())
+    # Separate the text of neighbouring cells, which text_content() glues together
+    return words(' '.join((body if body is not None else doc).itertext()))
 
 
 def check(path, out_dir=None):

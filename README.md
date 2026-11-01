@@ -80,8 +80,11 @@ html4 = convert(open('page.html', 'rb').read(), viewport_width=800)
 `examples/grid.html` and `examples/flex.html` are test pages with typical grid
 and flexbox layouts; `examples/out/` contains the converted versions.
 
-Saved real-world pages go in `testpages/` (not checked in, see
-[testpages/README.md](testpages/README.md)).
+`tests/pages/` contains small test pages that rebuild the layout patterns of
+real news sites (fixed headers, sliders, CSS tables, utility classes, ...)
+with neutral text; `tests/test_pages.py` checks the conversion of each
+pattern. The saved real-world pages themselves go in `testpages/` (not checked
+in, see [testpages/README.md](testpages/README.md)).
 
 ```sh
 python -m pytest

@@ -26,6 +26,10 @@ images kept, and two text measures:
   links, screen reader text, off-canvas menus, overlays). A jump here points to
   an over-eager heuristic.
 
+When a saved page shows a new problem, rebuild the pattern with neutral text
+in `tests/pages/` and add a check to `tests/test_pages.py`, so the fix stays
+covered in the repository.
+
 ## Collection
 
 | Folder | Source | Saved | Type |

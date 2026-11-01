@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- Patterns from a long technology news page built with utility classes:
+     an external stylesheet with media queries, images whose width attribute
+     is the file size, column-flow grids, a slider of fixed-width cards and
+     links that inherit text-decoration: none. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Utility classes</title>
+<link rel="stylesheet" href="utility-classes.css">
+</head>
+<body>
+<nav class="hidden md:flex gap-4">
+  <a href="#">Ticker</a><a href="#">Security</a><a href="#">Developer</a>
+</nav>
+<a href="#" class="md:hidden">Mobile only link</a>
+<section class="grid gap-6 md:grid-flow-col md:auto-cols-fr">
+  <article><img class="w-full" src="big.webp" width="4031" height="2267" alt="Big image"><h2>First column</h2></article>
+  <article><img src="logo-light.png" class="dark:hidden" alt="Light logo"><img src="logo-dark.png" class="hidden dark:block" alt="Dark logo"><h2>Second column</h2></article>
+  <article><h2>Third column</h2></article>
+</section>
+<ul class="flex gap-4">
+  <li><div class="w-52"><img src="p1.webp" alt="Product one"><h3>Product one</h3></div></li>
+  <li><div class="w-52"><img src="p2.webp" alt="Product two"><h3>Product two</h3></div></li>
+  <li><div class="w-52"><img src="p3.webp" alt="Product three"><h3>Product three</h3></div></li>
+  <li><div class="w-52"><img src="p4.webp" alt="Product four"><h3>Product four</h3></div></li>
+  <li><div class="w-52"><img src="p5.webp" alt="Product five"><h3>Product five</h3></div></li>
+</ul>
+</body>
+</html>

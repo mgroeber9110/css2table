@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- Patterns from a regional TV news page: a menu built from
+     display: table-cell items, uppercase labels via text-transform, icons
+     drawn with an icon font, and padding-top that makes room for a fixed
+     header. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Table menu</title>
+<style>
+body { margin: 0; font-family: "Source Sans Pro", Arial, sans-serif; }
+.header { position: fixed; top: 0; left: 0; right: 0; height: 80px; }
+.menu { display: inline-table; list-style: none; margin: 0; padding: 0; }
+.menu li { display: table-cell; white-space: nowrap; padding: 0 32px 0 0; }
+.icon { display: block; width: 20px; height: 20px; padding: 4px; background: none; }
+.icon::before { content: "\e900"; font-family: icons; }
+main { padding-top: 158px; }
+.kicker { text-transform: uppercase; font-size: 14px; color: #009; }
+</style>
+</head>
+<body>
+<header class="header">
+  <ul class="menu">
+    <li><a href="#">South</a></li>
+    <li><a href="#">Country</a></li>
+    <li><a href="#">News archive</a></li>
+    <li><a href="#">Radio live</a></li>
+  </ul>
+  <div class="icon"><i></i></div>
+  <div class="icon"><i></i></div>
+</header>
+<main>
+  <p class="kicker">Mountain town</p>
+  <h2>A first drive through the new tunnel</h2>
+</main>
+</body>
+</html>

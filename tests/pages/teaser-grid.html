@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- Patterns from a regional broadcaster home page: a CSS reset with
+     `all: unset; display: revert`, grid-template-areas, images with srcset
+     but no src, and an off-canvas menu moved by translate(-100%). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Teaser grid</title>
+<style>
+body { margin: 0; font-family: Arial, sans-serif; }
+.reset * { all: unset; display: revert; }
+.menu { position: fixed; top: 0; left: 0; transform: translateX(-100%); }
+.grid { display: grid; grid-template-columns: 2fr 1fr;
+        grid-template-areas: "lead side" "foot foot"; gap: 16px; }
+.lead { grid-area: lead; }
+.side { grid-area: side; }
+.foot { grid-area: foot; }
+.pair { display: flex; flex-wrap: wrap; gap: 1.44rem; }
+.pair > div { width: calc(50% - 1.44rem / 2); }
+.label { font-size: clamp(14px, 2vw, 22px); }
+</style>
+</head>
+<body>
+<nav class="menu"><a href="#">Hidden menu entry</a></nav>
+<div class="reset">
+  <div class="grid">
+    <div class="lead"><img srcset="placeholder.png 20w, lead-640.jpg 640w, lead-1920.jpg 1920w" alt="Lead teaser image"><h2>Lead teaser</h2></div>
+    <div class="side"><p class="label">Side teaser</p></div>
+    <div class="foot"><p>Footer teaser</p></div>
+  </div>
+  <ul><li>Revert keeps list items</li></ul>
+</div>
+<div class="pair"><div>Left half</div><div>Right half</div></div>
+</body>
+</html>
