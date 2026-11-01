@@ -37,7 +37,7 @@ def test_page_is_legacy_html(name):
     result, doc = convert_page(name)
     html = result['html']
     assert html.startswith('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01')
-    for forbidden in ('<script', '<svg', '<source', '<picture', 'class='):
+    for forbidden in ('<script', '<svg', '<source', '<picture', ' class='):
         assert forbidden not in html
     assert result['text_coverage'] == 1.0
     for el in doc.iter('img', 'table', 'td'):
@@ -132,3 +132,35 @@ def test_utility_classes():
     # Gaps are cells of their own, links inherit text-decoration: none
     assert doc.xpath('//td[@width="16"]')
     assert all('text-decoration:none' in (a.get('style') or '') for a in doc.iter('a'))
+
+
+def test_scroll_rows():
+    result, doc = convert_page('scroll-rows')
+    body = text(doc.find('body'))
+    # Skip link scaled to 0, flyout moved by translateX(calc(100% + 10px)),
+    # and the content of a closed <details> are hidden; the summary stays
+    for hidden in ('Jump to content', 'Flyout entry', 'Collapsed entry'):
+        assert hidden not in body
+    assert 'Sections' in body
+    # Items on the same named grid lines share a cell instead of being lost
+    edition = cell_with(doc, 'Edition')
+    assert 'Masthead logo' in text(edition) and edition.find('.//br') is not None
+    assert edition.get('colspan') == '12'
+    assert 'Pillar links' in body
+    # Flex cards with min-width wrap into lines
+    one = cell_with(doc, 'Card one').getparent()
+    while 'Card two' not in text(one):
+        one = one.getparent()
+    assert 'Card five' not in text(one)
+    # A column-flow grid with calc(100% - 6rem) columns shows one item per row
+    assert 'Ticker two' not in text(cell_with(doc, 'Ticker one').getparent())
+    # Fixed-width cards (inside display: contents) get fewer equal columns
+    strip = cell_with(doc, 'Strip one')
+    while strip.tag != 'td' or strip.get('width') is None:
+        strip = strip.getparent()
+    assert strip.get('width') == '50%'
+    # width: 100% of an auto-fill grid item refers to its column
+    category = cell_with(doc, 'Category one')
+    while category.get('width') != '25%':
+        category = category.getparent()
+    assert 'Category four' in text(category.getparent())

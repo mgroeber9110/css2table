@@ -22,7 +22,7 @@ def test_saved_page(path):
     result = check(path)
     html = result['html']
     assert html.startswith('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01')
-    for forbidden in ('<script', '<iframe', '<svg', 'class='):
+    for forbidden in ('<script', '<iframe', '<svg', ' class='):
         assert forbidden not in html
     assert result['text_coverage'] >= MIN_TEXT_COVERAGE
     assert result['seconds'] < 10

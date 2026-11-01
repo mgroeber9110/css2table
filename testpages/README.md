@@ -39,3 +39,11 @@ covered in the repository.
 | `tagesschau-main/` | tagesschau.de home page | 2026-10-27 | Long teaser page with sliders and many hidden labels |
 | `rainews/` | Tagesschau page of RaiNews (South Tyrol) | 2026-10-28 | Menu as CSS table (`display: table-cell`), icon fonts, uppercase labels |
 | `heise/` | heise online home page | 2026-10-29 | Long Tailwind page: utility classes, column grids, product sliders |
+| `spiegel/` | SPIEGEL home page | 2026-11-01 | Very long page, swiper sliders, mega menu |
+| `bbc/` | BBC News home page | 2026-11-01 | Inline CSS-in-JS styles, no-JS menu in `<details>` |
+| `guardian/` | The Guardian international page | 2026-11-01 | Named grid lines, scrolling card strips |
+| `t3n/` | t3n home page | 2026-11-01 | Styled components, off-canvas burger menu |
+| `netzpolitik/` | netzpolitik.org home page | 2026-11-01 | WordPress blocks, column-flow ticker carousel |
+| `wikipedia/` | German Wikipedia article (Netscape Navigator) | 2026-11-01 | Text page with infobox table |
+| `csstricks/` | CSS-Tricks home page | 2026-11-01 | Card sliders with min-width, code snippets |
+| `thomann/` | Thomann category page (electric guitars) | 2026-11-01 | Shop: auto-fill category grid, Tailwind |

@@ -40,6 +40,8 @@ font size by itself.
 | `display: table` / `table-row` / `table-cell` | real table rows and cells |
 | `text-transform` | text converted to upper/lower case |
 | `grid-auto-flow: column` without a column template | one column per item |
+| named grid lines (`[content-start]`) | resolved like line numbers; items on the same lines share a cell |
+| rows of cards wider than the screen (min-width, fixed-width cards, wide column-flow tracks) | fewer columns or wrapped lines |
 | `img` `width` in CSS | replaces the width attribute (often the file's size) |
 | `max-width` + `margin: 0 auto` | `<table width="…" align="center">` (full width if `max-width` is wider than the screen) |
 | `padding` | `cellpadding` (average of the four sides; top and bottom count at most as much as left/right) |
@@ -50,7 +52,7 @@ font size by itself.
 | `<picture>` / `srcset` | the `<img>` inside is kept; without `src`, the widest `srcset` image that fits the screen is used |
 | `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
 | `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
-| `display: none`, off-screen elements (skip links, off-canvas menus), bottom-anchored or full-screen `position: fixed` overlays, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
+| `display: none`, closed `<details>`, off-screen elements (skip links, off-canvas menus, `translate(±100%)`, `scale(0)`), bottom-anchored or full-screen `position: fixed` overlays, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
 
 ## Usage
 

@@ -9,10 +9,11 @@ import re
 from dataclasses import dataclass
 
 import lxml.html
+import tinycss2
 from lxml import etree
 
 from .cascade import Style, StyleResolver
-from .values import (color, font_face, html_font_size, length, px, tokens,
+from .values import (MATH_FUNCTIONS, color, font_face, html_font_size, length, px, tokens,
                      split_commas)
 
 DOCTYPE = ('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" '
@@ -216,6 +217,10 @@ class Converter:
             return False
         if s['display'] == 'none' or s['visibility'] in ('hidden', 'collapse'):
             return False
+        parent = el.getparent()
+        if parent is not None and parent.tag == 'details' and parent.get('open') is None \
+                and el.tag != 'summary':
+            return False  # closed <details>: only the summary shows
         position = s['position']
         if position in ('absolute', 'fixed') and (self.offscreen(s) or s['opacity'] == '0'):
             return False
@@ -238,9 +243,24 @@ class Converter:
             # far outside, or moved out by at least its own size (off-canvas menus)
             if offset is not None and (offset <= -999 or (size and offset <= -size)):
                 return True
-        if re.search(r'translate[xy]?\(\s*-?100%', (s['transform'] or '').lower()):
+        if self.transformed_away(s['transform']):
             return True
         return 'rect(0' in (s['clip'] or '').replace(' ', '') or 'inset(50%' in (s['clip-path'] or '')
+
+    def transformed_away(self, value):
+        """translate() by its full size (calc(100% + 10px) too) or scale(0)."""
+        for t in tokens(value or ''):
+            if t.type != 'function':
+                continue
+            args = [a for a in split_commas(t.arguments) if a]
+            if t.lower_name.startswith('translate') and args:
+                size = length(args[0][0])
+                if size and size[0] == '%' and abs(size[1]) >= 100:
+                    return True
+            elif t.lower_name.startswith('scale') and args:
+                if all(a[0].type == 'number' and a[0].value == 0 for a in args[:1]):
+                    return True
+        return False
 
     def emit_children(self, el, out, avail, ctx, pre=False):
         s = self.style(el)
@@ -690,23 +710,61 @@ class Converter:
         size = self.flex_basis(item.style)[0]
         if size is not None:
             return size[1] if size[0] == 'px' else size[1] * avail / 100
-        inner = self.wrapped_width(item.el)
+        exact = length(item.style['width'], item.style.font_size)
+        inner = self.fixed_width(item.style, avail) or self.wrapped_width(item.el, avail)
         if inner is not None:
-            return inner
+            if exact and exact[0] == 'px':
+                return inner
+            # min-width is only a lower bound: rows of icons and names or
+            # code blocks cannot wrap
+            return max(inner, self.min_content(item.el))
         text = collapse(self.text_of(item)).strip()
         if not text or len(text) > SHORT_TEXT:
             return None
         return text_width(text, item.style.font_size)
 
-    def wrapped_width(self, el, depth=3):
+    def wrapped_width(self, el, avail, depth=4):
         """Pixel width of the only child, e.g. a card with a fixed width in an <li>."""
         children = [c for c in el if isinstance(c.tag, str) and self.visible(c, self.style(c))]
         if depth == 0 or len(children) != 1 or (el.text or '').strip() or (children[0].tail or '').strip():
             return None
-        size = length(self.style(children[0])['width'], self.style(children[0]).font_size)
+        child = children[0]
+        return self.fixed_width(self.style(child), avail) or self.wrapped_width(child, avail, depth - 1)
+
+    def min_content(self, el, depth=6):
+        """Rough minimum width of an element: what cannot wrap inside it."""
+        s = self.style(el)
+        if depth == 0 or not self.visible(el, s):
+            return 0
+        if el.tag == 'img':
+            try:
+                return float(el.get('width', 0)) if s['width'] in (None, 'auto') else 0
+            except ValueError:
+                return 0
+        if el.tag == 'pre' or (s['white-space'] or '').startswith('pre'):
+            lines = ''.join(el.itertext()).expandtabs(4).splitlines() or ['']
+            return max(len(line) for line in lines) * s.font_size * 0.6
+        if s['white-space'] == 'nowrap':
+            return text_width(collapse(''.join(el.itertext())).strip(), s.font_size)
+        words = collapse((el.text or '') + ' ' + ' '.join(c.tail or '' for c in el)).split()
+        own = max((len(w) * s.font_size * 0.55 for w in words), default=0)
+        children = [self.min_content(c, depth - 1) for c in el if isinstance(c.tag, str)]
+        if s['display'] in ('flex', 'inline-flex') and not (s['flex-direction'] or 'row').startswith('column') \
+                and s['flex-wrap'] not in ('wrap', 'wrap-reverse'):
+            gap = px(s['column-gap'], s.font_size) or 0
+            return sum(children) + gap * max(0, len(children) - 1)
+        return max([own] + children)
+
+    def fixed_width(self, s, avail):
+        """A pixel width from width, or from max-width/min-width up to the container width."""
+        size = length(s['width'], s.font_size)
         if size is not None:
             return size[1] if size[0] == 'px' else None
-        return self.wrapped_width(children[0], depth - 1)
+        for prop in ('max-width', 'min-width'):
+            size = length(s[prop], s.font_size)
+            if size and size[0] == 'px' and 0 < size[1] <= avail:
+                return size[1]
+        return None
 
     def overflows(self, items, avail, gap):
         """Are the items of a flex row clearly wider than the container?"""
@@ -825,6 +883,30 @@ class Converter:
             return item.text
         return ''.join(item.el.itertext())
 
+    def fit_tracks(self, tracks, items, avail, gap):
+        """Fewer columns when the items cannot fit, e.g. a scrolling row of cards.
+
+        Only for auto-placed items in equal columns.
+        """
+        if len(tracks) < 2 or any(t != tracks[0] for t in tracks):
+            return tracks
+        for item in items:
+            if item.el is not None and any(
+                    not (item.style[p] or 'auto').startswith(('auto', 'span'))
+                    for p in ('grid-column-start', 'grid-column-end', 'grid-row-start')):
+                return tracks  # placed on explicit lines
+        t = tracks[0]
+        track = t.get('px') or (t['value'] * avail / 100 if t['kind'] == '%' else 0) or t.get('min') or 0
+        # Percentages of grid items refer to their column, not the container
+        hints = [self.item_width(i, avail) for i in items
+                 if i.el is not None and (length(i.style['width'], i.style.font_size) or ('px',))[0] != '%']
+        hints = [h for h in hints if h]
+        widest = max([track] + hints)
+        if not widest or widest * len(tracks) + gap * (len(tracks) - 1) <= avail * 1.1:
+            return tracks
+        k = max(1, int((avail + gap) // (widest + gap)))
+        return [{'kind': 'fr', 'value': 1.0}] * k
+
     def grid(self, el, s, avail, shrink=False):
         root, table, cavail = self.frame(s, avail, shrink or s['display'] == 'inline-grid')
         column_gap = self.gap(s, 'column-gap', cavail)
@@ -839,15 +921,24 @@ class Converter:
                 template = 'repeat(%d, 1fr)' % len(items)
         tracks = parse_tracks(template, cavail, column_gap)
         areas = parse_areas(s['grid-template-areas'])
+        if not areas:
+            tracks = self.fit_tracks(tracks, items, cavail, column_gap)
         ncols = max(len(tracks), max((len(r) for r in areas), default=0), 1)
-        placed, ncols = place_items(items, ncols, areas)
+        placed, ncols = place_items(items, ncols, areas, line_names(template, cavail, column_gap))
         tracks += [{'kind': 'auto'}] * (ncols - len(tracks))
         widths = track_widths(tracks, cavail, column_gap)
 
-        start = {(r, c): (item, rs, cs) for item, r, c, rs, cs in placed}
-        covered = set()
+        # Items placed on top of each other (e.g. on the same named lines)
+        # share the cell of the first one
+        start, covered = {}, {}
         for item, r, c, rs, cs in placed:
-            covered |= {(r + i, c + j) for i in range(rs) for j in range(cs)}
+            if (r, c) in covered:
+                start[covered[(r, c)]][0].append(item)
+                continue
+            start[(r, c)] = ([item], rs, cs)
+            for i in range(rs):
+                for j in range(cs):
+                    covered.setdefault((r + i, c + j), (r, c))
         nrows = max((r + rs for _, r, _, rs, _ in placed), default=0)
         valign_default = VALIGN.get(s['align-items'], 'top')
 
@@ -855,7 +946,8 @@ class Converter:
             tr = sub(table, 'tr')
             for c in range(ncols):
                 if (r, c) in start:
-                    item, rs, cs = start[(r, c)]
+                    group, rs, cs = start[(r, c)]
+                    item = group[0]
                     td = sub(tr, 'td', valign=valign_default)
                     if item.el is not None and item.style['align-self'] not in ('auto', None):
                         td.set('valign', VALIGN.get(item.style['align-self'], 'top'))
@@ -866,7 +958,10 @@ class Converter:
                     width, est = span_width(widths[c:c + cs], cavail, column_gap)
                     if width:
                         td.set('width', width)
-                    self.fill_cell(td, item, s, est)
+                    for i, member in enumerate(group):
+                        if i:
+                            sub(td, 'br')
+                        self.fill_cell(td, member, s, est)
                 elif (r, c) not in covered:
                     td = sub(tr, 'td')
                     width, _ = span_width(widths[c:c + 1], cavail, column_gap)
@@ -919,6 +1014,10 @@ def parse_track(t):
         n = px(t)
         if n is not None:
             return {'kind': 'px', 'px': n}
+    if t.type == 'function' and t.lower_name in MATH_FUNCTIONS:
+        size = length(t)
+        if size:
+            return {'kind': '%', 'value': size[1]} if size[0] == '%' else {'kind': 'px', 'px': size[1]}
     return {'kind': 'auto'}
 
 
@@ -983,10 +1082,25 @@ def parse_line(value):
         return ('name', p[0])
 
 
-def line_index(line, n, rects, axis, is_start):
+def line_names(value, avail, gap):
+    """Named grid lines of a track list: {name: 0-based line}."""
+    names, line = {}, 0
+    for t in tokens(value or ''):
+        if t.type == '[] block':
+            for name in t.content:
+                if name.type == 'ident':
+                    names.setdefault(name.value, line)
+        elif t.type != 'whitespace':
+            line += len(parse_tracks(tinycss2.serialize([t]), avail, gap))
+    return names
+
+
+def line_index(line, n, rects, axis, is_start, names=None):
     kind, value = line
     if kind == 'line':
         return value - 1 if value > 0 else max(0, n + 1 + value)
+    if names and value in names:
+        return names[value]
     name = value
     if name.endswith('-start'):
         name, is_start = name[:-6], True
@@ -998,11 +1112,11 @@ def line_index(line, n, rects, axis, is_start):
     return rect[axis] if is_start else rect[axis + 2]
 
 
-def resolve_axis(start, end, n, rects, axis):
+def resolve_axis(start, end, n, rects, axis, names=None):
     """Start (0-based, or None for automatic) and span along one axis."""
     s, e = parse_line(start), parse_line(end)
-    si = line_index(s, n, rects, axis, True) if s and s[0] != 'span' else None
-    ei = line_index(e, n, rects, axis, False) if e and e[0] != 'span' else None
+    si = line_index(s, n, rects, axis, True, names) if s and s[0] != 'span' else None
+    ei = line_index(e, n, rects, axis, False, names) if e and e[0] != 'span' else None
     span = s[1] if s and s[0] == 'span' else (e[1] if e and e[0] == 'span' else 1)
     if si is not None and ei is not None:
         if ei < si:
@@ -1015,7 +1129,7 @@ def resolve_axis(start, end, n, rects, axis):
     return None, span
 
 
-def place_items(items, ncols, areas):
+def place_items(items, ncols, areas, col_names=None):
     """Place grid items in a grid (simplified auto-placement algorithm)."""
     rects = area_rects(areas)
     nrows = len(areas)
@@ -1026,7 +1140,7 @@ def place_items(items, ncols, areas):
             specs.append((item, (None, 1), (None, 1)))
             continue
         row = resolve_axis(s['grid-row-start'], s['grid-row-end'], nrows, rects, 0)
-        col = resolve_axis(s['grid-column-start'], s['grid-column-end'], ncols, rects, 1)
+        col = resolve_axis(s['grid-column-start'], s['grid-column-end'], ncols, rects, 1, col_names)
         specs.append((item, row, col))
     for _, _, (c, cs) in specs:
         if c is not None:
