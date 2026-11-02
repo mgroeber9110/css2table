@@ -26,6 +26,10 @@ body { margin: 0; font-family: Arial, sans-serif; }
 .edition { grid-column: content-start / content-end; grid-row: 1; }
 .logo { grid-column: content-start / content-end; grid-row: 1; }
 .pillars { grid-column: content-start / content-end; grid-row: 2; }
+.section { display: grid;
+  grid-template-columns: minmax(0, 1fr) [content-start title-start] repeat(12, 40px) [content-end title-end] minmax(0, 1fr); }
+.section h2 { grid-column: title; grid-row: 1; }
+.section .body { grid-column: content; grid-row: content-toggleable; }
 </style>
 </head>
 <body>
@@ -40,6 +44,10 @@ body { margin: 0; font-family: Arial, sans-serif; }
   <div class="logo">Masthead logo</div>
   <div class="pillars">Pillar links</div>
 </div>
+<section class="section">
+  <h2>Section title</h2>
+  <div class="body">Section body</div>
+</section>
 <div class="cards" id="main">
   <article><h3>Card one</h3><p>Text</p></article>
   <article><h3>Card two</h3><p>Text</p></article>

@@ -1099,8 +1099,11 @@ def line_index(line, n, rects, axis, is_start, names=None):
     kind, value = line
     if kind == 'line':
         return value - 1 if value > 0 else max(0, n + 1 + value)
-    if names and value in names:
-        return names[value]
+    if names:
+        # `grid-column: content` means the lines content-start / content-end
+        for name in (value, value + ('-start' if is_start else '-end')):
+            if name in names:
+                return names[name]
     name = value
     if name.endswith('-start'):
         name, is_start = name[:-6], True

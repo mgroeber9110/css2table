@@ -147,6 +147,10 @@ def test_scroll_rows():
     assert 'Masthead logo' in text(edition) and edition.find('.//br') is not None
     assert edition.get('colspan') == '12'
     assert 'Pillar links' in body
+    # grid-column: content uses the lines content-start / content-end
+    section = cell_with(doc, 'Section body')
+    assert section.get('colspan') == '12'
+    assert 'Section title' not in text(section.getparent())
     # Flex cards with min-width wrap into lines
     one = cell_with(doc, 'Card one').getparent()
     while 'Card two' not in text(one):
