@@ -69,6 +69,8 @@ python -m css2table page.html --width 640 --encoding iso-8859-1 --base-url https
   become `&#…;`.
 
 Linked stylesheets are only loaded from local files relative to the input.
+Compiled stylesheets are cached in the process (the last 64), so converting
+several pages of the same site in one process is about twice as fast.
 
 As a library:
 

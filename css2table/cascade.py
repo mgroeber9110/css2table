@@ -5,6 +5,7 @@ the converter needs to map the page onto tables.
 """
 
 import re
+from functools import lru_cache
 from urllib.parse import urljoin
 
 import cssselect2
@@ -93,8 +94,9 @@ BORDER_STYLES = {'none', 'hidden', 'dotted', 'dashed', 'solid', 'double',
                  'groove', 'ridge', 'inset', 'outset'}
 
 
+@lru_cache(maxsize=None)
 def expand(name, value):
-    """Expand shorthand properties into longhands."""
+    """Expand shorthand properties into longhands (cached: values repeat a lot)."""
     if name in ('margin', 'padding'):
         sides = _four(value)
         if not sides:
@@ -241,42 +243,13 @@ class StyleResolver:
             self._add_css(css, origin=1, base=url)
 
     def _add_css(self, css, origin, base=None):
-        rules = tinycss2.parse_stylesheet(css, skip_comments=True, skip_whitespace=True)
-        self._add_rules(rules, origin, base)
-
-    def _add_rules(self, rules, origin, base):
-        for rule in rules:
-            if rule.type == 'qualified-rule':
-                try:
-                    selectors = cssselect2.compile_selector_list(rule.prelude)
-                except cssselect2.SelectorError:
-                    continue
-                decls = declarations(rule.content)
-                for selector in selectors:
-                    if decls and not selector.pseudo_element:
-                        self.matcher.add_selector(selector, (origin, decls))
-            elif rule.type == 'at-rule':
-                keyword = rule.lower_at_keyword
-                if rule.content is not None and (
-                        keyword in ('supports', 'layer') or
-                        keyword == 'media' and media_matches(tinycss2.serialize(rule.prelude), self.viewport)):
-                    nested = tinycss2.parse_rule_list(rule.content, skip_comments=True, skip_whitespace=True)
-                    self._add_rules(nested, origin, base)
-                elif keyword == 'import':
-                    self._at_import(rule, base)
-
-    def _at_import(self, rule, base):
-        toks = tokens(rule.prelude)
-        if not toks:
-            return
-        t = toks[0]
-        href = t.value if t.type in ('string', 'url') else None
-        if t.type == 'function' and t.lower_name == 'url':
-            args = tokens(t.arguments)
-            href = args[0].value if args else None
-        rest = tinycss2.serialize(rule.prelude[rule.prelude.index(t) + 1:])
-        if href and media_matches(rest, self.viewport):
-            self._import(href, base)
+        # Compiled stylesheets are cached: sites use the same CSS on every
+        # page, and selector compilation is a large part of the run time
+        for kind, a, b in compile_css(css, origin, base, self.viewport):
+            if kind == 'selector':
+                self.matcher.add_selector(a, b)
+            else:
+                self._import(a, b)
 
     def _compute(self, root):
         ROOT_FONT_SIZE.set(16.0)  # `rem` on the root element itself uses the initial size
@@ -299,12 +272,20 @@ class StyleResolver:
 
     def _resolve(self, candidates, parent):
         style = Style()
-        custom = dict(parent.custom) if parent is not None else {}
-        for _, name, value in candidates:
-            if name.startswith('--'):
+        # Inherited custom properties are already substituted; only the ones
+        # declared here need it. Without any, the parent's dict is shared.
+        custom = parent.custom if parent is not None else {}
+        # Utility CSS often redeclares the same custom properties on every
+        # element (`* { --tw-shadow: 0 0 #0000 }`): unchanged ones are skipped
+        own = {name: value for _, name, value in candidates if name.startswith('--')}
+        own = [(name, value) for name, value in own.items()
+               if custom.get(name) != value or 'var(' in value]
+        if own:
+            custom = dict(custom)
+            for name, value in own:
                 custom[name] = value
-        for name in list(custom):
-            custom[name] = substitute(custom[name], custom)
+            for name in dict(own):
+                custom[name] = substitute(custom[name], custom)
         style.custom = custom
 
         declared = {}
@@ -312,7 +293,8 @@ class StyleResolver:
         for (_, origin, *_), name, value in candidates:
             if name.startswith('--'):
                 continue
-            value = substitute(value, custom)
+            if 'var(' in value:
+                value = substitute(value, custom)
             keyword = value.lower()
             if name == 'all':
                 # Reset everything declared so far (CSS resets often use `all: unset`)
@@ -350,3 +332,50 @@ class StyleResolver:
             'inherit', 'unset', 'initial') else parent_size
         style['font-size'] = '%gpx' % style.font_size
         return style
+
+
+@lru_cache(maxsize=64)
+def compile_css(css, origin, base, viewport):
+    """Selectors and @imports of a stylesheet, in order, as a tuple of
+    ('selector', selector, (origin, declarations)) and ('import', href, base)."""
+    out = []
+    rules = tinycss2.parse_stylesheet(css, skip_comments=True, skip_whitespace=True)
+    _compile_rules(rules, origin, base, viewport, out)
+    return tuple(out)
+
+
+def _compile_rules(rules, origin, base, viewport, out):
+    for rule in rules:
+        if rule.type == 'qualified-rule':
+            try:
+                selectors = cssselect2.compile_selector_list(rule.prelude)
+            except cssselect2.SelectorError:
+                continue
+            decls = declarations(rule.content)
+            for selector in selectors:
+                if decls and not selector.pseudo_element:
+                    out.append(('selector', selector, (origin, decls)))
+        elif rule.type == 'at-rule':
+            keyword = rule.lower_at_keyword
+            if rule.content is not None and (
+                    keyword in ('supports', 'layer') or
+                    keyword == 'media' and media_matches(tinycss2.serialize(rule.prelude), viewport)):
+                nested = tinycss2.parse_rule_list(rule.content, skip_comments=True, skip_whitespace=True)
+                _compile_rules(nested, origin, base, viewport, out)
+            elif keyword == 'import':
+                href = _import_href(rule, viewport)
+                if href:
+                    out.append(('import', href, base))
+
+
+def _import_href(rule, viewport):
+    toks = tokens(rule.prelude)
+    if not toks:
+        return None
+    t = toks[0]
+    href = t.value if t.type in ('string', 'url') else None
+    if t.type == 'function' and t.lower_name == 'url':
+        args = tokens(t.arguments)
+        href = args[0].value if args else None
+    rest = tinycss2.serialize(rule.prelude[rule.prelude.index(t) + 1:])
+    return href if media_matches(rest, viewport) else None

@@ -2,6 +2,7 @@
 
 import re
 from contextvars import ContextVar
+from functools import lru_cache
 
 import tinycss2
 from tinycss2 import color3
@@ -36,13 +37,27 @@ SYSTEM_FONTS = {'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfo
 def tokens(value):
     """Component values without whitespace and comments."""
     if isinstance(value, str):
-        value = tinycss2.parse_component_value_list(value)
+        return list(_tokens(value))
     return [t for t in value if t.type not in ('whitespace', 'comment')]
+
+
+@lru_cache(maxsize=4096)
+def _tokens(value):
+    # The same values are parsed over and over (once per matching element)
+    return tuple(t for t in tinycss2.parse_component_value_list(value)
+                 if t.type not in ('whitespace', 'comment'))
 
 
 def parts(value):
     """Split a value at top-level whitespace, e.g. '0 auto' -> ['0', 'auto']."""
+    if isinstance(value, str):
+        return list(_parts(value))
     return [tinycss2.serialize([t]).strip() for t in tokens(value)]
+
+
+@lru_cache(maxsize=4096)
+def _parts(value):
+    return tuple(tinycss2.serialize([t]).strip() for t in _tokens(value))
 
 
 def split_commas(toks):

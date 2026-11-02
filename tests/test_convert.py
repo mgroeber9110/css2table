@@ -377,3 +377,19 @@ def test_slider_of_fixed_width_cards_wraps():
     cards = ''.join(f'<li><div style="width: 13rem">Card {i}</div></li>' for i in range(8))
     doc = parse(page('ul { display: flex; gap: 16px }', f'<ul>{cards}</ul>'))
     assert len(doc.xpath('//table/tr/td/table')) > 1
+
+
+def test_custom_property_redeclared_with_parent_value():
+    # The later declaration wins even when it equals the inherited value
+    doc, r = styles(':root { --c: red } p { --c: blue } p.x { --c: red } p { color: var(--c) }',
+                    '<p class="x">t</p>')
+    assert r.style(doc.find('.//p'))['color'] == 'red'
+
+
+def test_stylesheets_are_compiled_once():
+    from css2table.cascade import compile_css
+    html = page('p { color: red }', '<p>t</p>')
+    convert(html)
+    hits = compile_css.cache_info().hits
+    convert(html)
+    assert compile_css.cache_info().hits > hits
