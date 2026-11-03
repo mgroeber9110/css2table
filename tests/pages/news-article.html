@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<!-- Patterns from a news article page: fixed header, skip link, off-canvas
+     menu, cookie banner, <picture> with <source>, flex-wrap with calc(). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Article page</title>
+<style>
+body { margin: 0; font-family: Helvetica, Arial, sans-serif; color: #333; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+           clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -9999px; }
+.header { position: fixed; top: 0; left: 0; right: 0; height: 60px;
+          background: #0c3a6e; color: #fff; display: flex; align-items: center; }
+.header a { color: #fff; }
+.flyout { position: fixed; top: 0; left: -300px; width: 280px; height: 100%;
+          background: #fff; }
+.cookie { position: fixed; bottom: 0; left: 0; right: 0; background: #eee; }
+.content { padding-top: 60px; }
+.teasers { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+.teaser { width: calc(50% - 1.5rem / 2); }
+.headline { display: block; font-size: 2rem; color: #0c3a6e; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="header">
+  <span class="logo">Daily Example</span>
+  <span class="sr-only">Main navigation</span>
+  <a href="#sections">Sections</a>
+</div>
+<nav class="flyout"><a href="#">Flyout entry</a></nav>
+<div class="content" id="main">
+  <h1><span class="headline">Example headline about a factory</span></h1>
+  <picture>
+    <source type="image/webp" srcset="lead-small.webp 320w, lead-large.webp 960w">
+    <img src="lead.jpg" alt="Lead image">
+  </picture>
+  <p>First paragraph of the article text.</p>
+  <div class="teasers">
+    <div class="teaser">Teaser one</div>
+    <div class="teaser">Teaser two</div>
+    <div class="teaser">Teaser three</div>
+    <div class="teaser">Teaser four</div>
+  </div>
+</div>
+<div class="cookie">Cookie banner text</div>
+</body>
+</html>

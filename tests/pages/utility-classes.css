@@ -1,0 +1,21 @@
+/* Utility classes in the style of Tailwind CSS */
+*, ::before, ::after { box-sizing: border-box; }
+a { color: inherit; text-decoration: inherit; }
+img { display: block; max-width: 100%; height: auto; }
+.flex { display: flex; }
+.grid { display: grid; }
+.gap-4 { gap: 1rem; }
+.gap-6 { gap: 1.5rem; }
+.w-full { width: 100%; }
+.w-52 { width: 13rem; }
+.hidden { display: none; }
+@media (min-width: 768px) {
+  .md\:grid-flow-col { grid-auto-flow: column; }
+  .md\:auto-cols-fr { grid-auto-columns: minmax(0, 1fr); }
+  .md\:flex { display: flex; }
+  .md\:hidden { display: none; }
+}
+@media (prefers-color-scheme: dark) {
+  .dark\:block { display: block; }
+  .dark\:hidden { display: none; }
+}

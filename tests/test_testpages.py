@@ -13,7 +13,7 @@ from tools.testpages import check, find_pages
 PAGES = find_pages()
 
 # Minimum share of the visible original text that must be kept
-MIN_TEXT_COVERAGE = 0.8
+MIN_TEXT_COVERAGE = 0.95
 
 
 @pytest.mark.skipif(not PAGES, reason='no test pages in testpages/')
@@ -22,7 +22,7 @@ def test_saved_page(path):
     result = check(path)
     html = result['html']
     assert html.startswith('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01')
-    for forbidden in ('<script', '<iframe', '<svg', 'class='):
+    for forbidden in ('<script', '<iframe', '<svg', ' class='):
         assert forbidden not in html
     assert result['text_coverage'] >= MIN_TEXT_COVERAGE
     assert result['seconds'] < 10

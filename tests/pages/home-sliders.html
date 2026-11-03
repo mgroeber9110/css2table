@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- Patterns from a news home page: html { font-size: 62.5% } with rem,
+     a slider whose slides get a pixel width from JavaScript, a horizontally
+     scrolling menu, inline-block topline above a -webkit-box headline, and
+     menu links spaced only by margin and padding. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home page</title>
+<style>
+html { font-size: 62.5%; }
+body { margin: 0; font-size: 1.6rem; font-family: Arial, sans-serif; }
+.subnav { display: flex; white-space: nowrap; overflow-x: auto; }
+.subnav a { display: inline-block; margin: 0 .5rem; padding: 0 .7rem; }
+.slider { display: flex; }
+.topline { display: inline-block; font-size: 1.4rem; }
+.headline { display: -webkit-box; -webkit-line-clamp: 3; font-size: 2.4rem; }
+.box { width: 30rem; background: #eee; }
+</style>
+</head>
+<body>
+<div class="subnav">
+  <a href="#">Elections</a><a href="#">Domestic</a><a href="#">World</a><a href="#">Business</a>
+  <a href="#">Science</a><a href="#">Fact finder</a><a href="#">Investigations</a>
+  <a href="#">Weather</a><a href="#">Videos and audio</a><a href="#">Sports</a>
+</div>
+<h3><span class="topline">After the election</span>
+    <span class="headline">Candidate leaves the country</span></h3>
+<div class="box">Box of 30rem</div>
+<div class="slider">
+  <div style="width: 1024px">Slide one</div>
+  <div style="width: 1024px">Slide two</div>
+  <div style="width: 1024px">Slide three</div>
+</div>
+</body>
+</html>

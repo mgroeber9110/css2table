@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!-- Patterns from international news, magazine and shop pages: rows of cards
+     that scroll sideways (min-width, column-flow grids, fixed-width cards in
+     equal columns), auto-fill grids with width: 100% items, named grid
+     lines, closed <details> menus, flyouts moved by
+     translateX(calc(100% + 10px)) and a skip link hidden with scale(0). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scrolling rows</title>
+<style>
+body { margin: 0; font-family: Arial, sans-serif; }
+.skip { position: absolute; left: .5rem; top: .5rem; transform: translate(0, 0) scaleX(0) scaleY(0); }
+.flyout { position: absolute; top: 100%; width: 400px; transform: translateX(calc(100% + 10px)); }
+.cards { display: flex; gap: 1rem; }
+.cards article { display: flex; flex-direction: column; min-width: 220px; }
+.ticker { display: grid; grid-auto-flow: column; grid-auto-columns: calc(100% - 6rem); }
+.strip { display: grid; grid-auto-flow: column; grid-template-columns: repeat(6, 1fr); }
+.strip li { display: list-item; grid-column: span 1; }
+.strip .wrap { display: contents; }
+.strip .card { width: 280px; }
+.shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+.shop li { display: inline-flex; width: 100%; }
+.masthead { display: grid;
+  grid-template-columns: [viewport-start] minmax(0, 1fr) [content-start] repeat(12, 40px) [content-end] minmax(0, 1fr) [viewport-end]; }
+.edition { grid-column: content-start / content-end; grid-row: 1; }
+.logo { grid-column: content-start / content-end; grid-row: 1; }
+.pillars { grid-column: content-start / content-end; grid-row: 2; }
+.section { display: grid;
+  grid-template-columns: minmax(0, 1fr) [content-start title-start] repeat(12, 40px) [content-end title-end] minmax(0, 1fr); }
+.section h2 { grid-column: title; grid-row: 1; }
+.section .body { grid-column: content; grid-row: content-toggleable; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Jump to content</a>
+<div style="position: relative">
+  <a href="#">Menu</a>
+  <div class="flyout">Flyout entry</div>
+</div>
+<details><summary>Sections</summary><ul><li>Collapsed entry</li></ul></details>
+<div class="masthead">
+  <div class="edition">Edition</div>
+  <div class="logo">Masthead logo</div>
+  <div class="pillars">Pillar links</div>
+</div>
+<section class="section">
+  <h2>Section title</h2>
+  <div class="body">Section body</div>
+</section>
+<div class="cards" id="main">
+  <article><h3>Card one</h3><p>Text</p></article>
+  <article><h3>Card two</h3><p>Text</p></article>
+  <article><h3>Card three</h3><p>Text</p></article>
+  <article><h3>Card four</h3><p>Text</p></article>
+  <article><h3>Card five</h3><p>Text</p></article>
+</div>
+<div class="ticker">
+  <div>Ticker one</div><div>Ticker two</div><div>Ticker three</div>
+</div>
+<ul class="strip">
+  <li><div class="wrap"><div class="card">Strip one</div></div></li>
+  <li><div class="wrap"><div class="card">Strip two</div></div></li>
+  <li><div class="wrap"><div class="card">Strip three</div></div></li>
+  <li><div class="wrap"><div class="card">Strip four</div></div></li>
+  <li><div class="wrap"><div class="card">Strip five</div></div></li>
+  <li><div class="wrap"><div class="card">Strip six</div></div></li>
+</ul>
+<ul class="shop">
+  <li>Category one</li><li>Category two</li><li>Category three</li><li>Category four</li>
+  <li>Category five</li><li>Category six</li><li>Category seven</li><li>Category eight</li>
+</ul>
+</body>
+</html>
