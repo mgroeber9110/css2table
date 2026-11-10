@@ -21,8 +21,12 @@ font size by itself.
 3. Decide per element: flex and grid containers become tables; blocks with a
    background, padding or width become single-cell tables; everything else is
    kept (with an HTML4 tag where needed).
-4. Output fonts and colors as `<font>`, `bgcolor`, `align` etc., and additionally
-   as a `style` attribute for browsers that support CSS1.
+4. Output fonts and colors as `<font>`, `bgcolor`, `align`, `<b>`, `<i>` etc. A
+   `style` attribute only carries what HTML cannot express, so the page does not
+   repeat its formatting: `text-decoration`, `background-color` of non-table
+   elements, `normal` weight or style, pixel font sizes between the seven
+   `<font size>` steps, the color of underlined links, and fonts inside
+   elements that cannot hold a `<font>` (lists, tables, form fields).
 
 | CSS | Table |
 | --- | --- |
