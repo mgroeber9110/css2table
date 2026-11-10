@@ -104,7 +104,12 @@ def test_values():
     assert color('rgb(255, 0, 0)') == '#ff0000'
     assert color('rgba(0, 0, 0, 0.5)') == '#808080'
     assert color('transparent') is None
-    assert font_face('Inter, system-ui, sans-serif') == 'Inter, Arial, Helvetica, sans-serif'
+    assert font_face('Inter, system-ui, sans-serif') == 'Arial, Helvetica'
+    # web fonts are dropped, known fonts kept, at most two names
+    assert font_face('"Source Sans VF", Verdana, Arial, sans-serif') == 'Verdana, Arial'
+    assert font_face('Iowan Old Style, Palatino Linotype, P052') == 'Palatino Linotype'
+    assert font_face('ui-monospace, SFMono-Regular, monospace') == 'Courier New, Courier'
+    assert font_face('font, font Fallback') is None
 
 
 # -- General output -------------------------------------------------------------
@@ -177,7 +182,7 @@ def test_colors_become_attributes_and_font_tags():
     assert table.get('bgcolor') == '#ff0000'
     assert table.get('cellpadding') == '10'
     font = table.find('.//td/font')
-    assert font.get('face') == 'Arial, Helvetica, sans-serif'
+    assert font.get('face') == 'Arial, Helvetica'
     assert font.get('color') == '#123456'
 
 

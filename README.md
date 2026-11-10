@@ -53,6 +53,7 @@ font size by itself.
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |
+| `font-family` with web fonts (`@font-face`) or modern system fonts | `face` keeps at most two fonts installed on systems around 2001 (Arial, Verdana, Georgia, …); generic families become Arial/Times/Courier |
 | `<picture>` / `srcset` | the `<img>` inside is kept; without `src`, the widest `srcset` image that fits the screen is used |
 | `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
 | `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
