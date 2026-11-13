@@ -13,7 +13,7 @@ import tinycss2
 from lxml import etree
 
 from .cascade import Style, StyleResolver
-from .values import (MATH_FUNCTIONS, color, font_face, html_font_size, length, px, tokens,
+from .values import (HTML_FONT_SIZES, MATH_FUNCTIONS, color, font_face, html_font_size, length, px, tokens,
                      split_commas)
 
 DOCTYPE = ('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" '
@@ -303,6 +303,9 @@ class Converter:
             n = sum(px(s[prop + side], s.font_size) or 0 for prop in ('margin-', 'padding-'))
             return NBSP * min(3, round(n / (s.font_size * 0.3)))
         left, right = spaces('left'), spaces('right')
+        # Put the spaces inside the <font> that carries the element's font size
+        while not (node.text or '').strip() and len(node) == 1 and node[0].tag in ('font', 'b', 'i'):
+            node = node[0]
         if left:
             node.text = left + (node.text or '')
         if right:
@@ -417,7 +420,13 @@ class Converter:
             node.attrib.pop('height', None)
 
     def apply_text(self, node, new, old, extra=None):
-        """Express font differences from `old` as a style attribute and <font>.
+        """Express font differences from `old` as HTML (<font>, <b>, <i>, align).
+
+        The style attribute only carries what HTML cannot express: everything
+        inside elements that cannot hold a <font> (lists, tables, form fields),
+        `normal` weight or style, pixel font sizes between the seven <font
+        size> steps, and the color of underlined links (the underline takes the
+        color of the <a>, not of the <font> inside it).
 
         Returns the element the content belongs in, and the new context.
         """
@@ -425,39 +434,44 @@ class Converter:
         css = []
         result = dict(old)
         diff = {k for k in new if new[k] != old[k]}
-        if 'color' in diff:
-            css.append('color:' + new['color'])
-        if 'face' in diff and new['face']:
-            css.append('font-family:' + new['face'])
-        if 'size' in diff:
-            css.append('font-size:%dpx' % new['size'])
-        if 'bold' in diff:
-            css.append('font-weight:' + ('bold' if new['bold'] else 'normal'))
-        if 'italic' in diff:
-            css.append('font-style:' + ('italic' if new['italic'] else 'normal'))
-        if 'align' in diff and tag in ALIGN_TAGS:
-            css.append('text-align:' + new['align'])
-            node.set('align', new['align'])
-            result['align'] = new['align']
-        css += extra or []
-        if css:
-            node.set('style', '; '.join(css))
-        if tag in NO_FONT:
-            return node, result
+        no_font = tag in NO_FONT
 
-        inner = node
         font = {}
         if 'face' in diff and new['face']:
             font['face'] = new['face']
         if 'color' in diff:
             font['color'] = new['color']
-        if 'size' in diff and html_font_size(new['size']) != html_font_size(old['size']):
-            font['size'] = str(html_font_size(new['size']))
+        step = html_font_size(new['size'])
+        if 'size' in diff and step != html_font_size(old['size']):
+            font['size'] = str(step)
+        bold = 'bold' in diff and new['bold'] and tag not in BOLD_TAGS
+        italic = 'italic' in diff and new['italic'] and tag not in ITALIC_TAGS
+
+        if 'color' in diff and (no_font or (tag == 'a' and 'text-decoration:none' not in (extra or []))):
+            css.append('color:' + new['color'])
+        if 'face' in diff and new['face'] and no_font:
+            css.append('font-family:' + new['face'])
+        if 'size' in diff and (no_font or 'size' not in font or HTML_FONT_SIZES[step - 1] != new['size']):
+            css.append('font-size:%dpx' % new['size'])
+        if 'bold' in diff and (no_font or not new['bold']):
+            css.append('font-weight:' + ('bold' if new['bold'] else 'normal'))
+        if 'italic' in diff and (no_font or not new['italic']):
+            css.append('font-style:' + ('italic' if new['italic'] else 'normal'))
+        if 'align' in diff and tag in ALIGN_TAGS:
+            node.set('align', new['align'])
+            result['align'] = new['align']
+        css += extra or []
+        if css:
+            node.set('style', '; '.join(css))
+        if no_font:
+            return node, result
+
+        inner = node
         if font:
             inner = sub(inner, 'font', **font)
-        if 'bold' in diff and new['bold'] and tag not in BOLD_TAGS:
+        if bold:
             inner = sub(inner, 'b')
-        if 'italic' in diff and new['italic'] and tag not in ITALIC_TAGS:
+        if italic:
             inner = sub(inner, 'i')
         for key in ('color', 'face', 'size', 'bold', 'italic'):
             result[key] = new[key]

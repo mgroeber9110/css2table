@@ -24,14 +24,25 @@ VIEWPORT_WIDTH = 800
 HTML_FONT_SIZES = [10, 13, 16, 18, 24, 32, 48]
 
 GENERIC_FONTS = {
-    'sans-serif': ['Arial', 'Helvetica', 'sans-serif'],
-    'serif': ['Times New Roman', 'Times', 'serif'],
-    'monospace': ['Courier New', 'Courier', 'monospace'],
-    'cursive': ['Comic Sans MS', 'cursive'],
-    'fantasy': ['Impact', 'fantasy'],
+    'sans-serif': ['Arial', 'Helvetica'],
+    'serif': ['Times New Roman', 'Times'],
+    'monospace': ['Courier New', 'Courier'],
+    'cursive': ['Comic Sans MS'],
+    'fantasy': ['Impact'],
 }
-# Modern system font names that a legacy browser does not know
+# Fonts that were installed on Windows and Mac systems around 2001. Other
+# names are web fonts (@font-face) or newer system fonts that a legacy browser
+# cannot use, so they are left out of <font face>.
+LEGACY_FONTS = {f.lower(): f for f in (
+    'Arial', 'Arial Black', 'Arial Narrow', 'Helvetica', 'Verdana', 'Tahoma',
+    'Trebuchet MS', 'Century Gothic', 'Lucida Sans Unicode', 'Lucida Grande',
+    'MS Sans Serif', 'Geneva', 'Times New Roman', 'Times', 'Georgia',
+    'Palatino Linotype', 'Palatino', 'Book Antiqua', 'Garamond', 'New York',
+    'Courier New', 'Courier', 'Lucida Console', 'Monaco', 'Comic Sans MS', 'Impact')}
+# Font names in <font face>; the first one installed wins
+MAX_FACES = 2
 SYSTEM_FONTS = {'system-ui', 'ui-sans-serif', '-apple-system', 'blinkmacsystemfont'}
+SYSTEM_GENERIC = {'ui-serif': 'serif', 'ui-monospace': 'monospace'}
 
 
 def tokens(value):
@@ -247,26 +258,26 @@ def first_color(value):
 
 
 def font_face(family):
-    """Translate a CSS font-family into a list for <font face>."""
+    """Translate a CSS font-family into a short list for <font face>.
+
+    Only fonts a legacy system has installed are kept (at most MAX_FACES); a
+    generic family adds its usual legacy fonts. Without any known font the
+    result is None, and the browser uses its default font.
+    """
     names = []
     for part in (family or '').split(','):
-        name = part.strip().strip('"\'')
-        low = name.lower()
-        if not name or low in ('inherit', 'initial', 'unset'):
-            continue
-        if low in SYSTEM_FONTS:
-            low = 'sans-serif'
-        elif low.startswith(('ui-', '-')):
-            continue
+        low = part.strip().strip('"\'').lower()
+        low = SYSTEM_GENERIC.get(low, 'sans-serif' if low in SYSTEM_FONTS else low)
         if low in GENERIC_FONTS:
             names += GENERIC_FONTS[low]
             break
-        names.append(name)
+        if low in LEGACY_FONTS:
+            names.append(LEGACY_FONTS[low])
     unique = []
     for n in names:
         if n not in unique:
             unique.append(n)
-    return ', '.join(unique[:4]) or None
+    return ', '.join(unique[:MAX_FACES]) or None
 
 
 def html_font_size(size_px):

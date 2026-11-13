@@ -104,7 +104,12 @@ def test_values():
     assert color('rgb(255, 0, 0)') == '#ff0000'
     assert color('rgba(0, 0, 0, 0.5)') == '#808080'
     assert color('transparent') is None
-    assert font_face('Inter, system-ui, sans-serif') == 'Inter, Arial, Helvetica, sans-serif'
+    assert font_face('Inter, system-ui, sans-serif') == 'Arial, Helvetica'
+    # web fonts are dropped, known fonts kept, at most two names
+    assert font_face('"Source Sans VF", Verdana, Arial, sans-serif') == 'Verdana, Arial'
+    assert font_face('Iowan Old Style, Palatino Linotype, P052') == 'Palatino Linotype'
+    assert font_face('ui-monospace, SFMono-Regular, monospace') == 'Courier New, Courier'
+    assert font_face('font, font Fallback') is None
 
 
 # -- General output -------------------------------------------------------------
@@ -177,7 +182,7 @@ def test_colors_become_attributes_and_font_tags():
     assert table.get('bgcolor') == '#ff0000'
     assert table.get('cellpadding') == '10'
     font = table.find('.//td/font')
-    assert font.get('face') == 'Arial, Helvetica, sans-serif'
+    assert font.get('face') == 'Arial, Helvetica'
     assert font.get('color') == '#123456'
 
 
@@ -393,3 +398,28 @@ def test_stylesheets_are_compiled_once():
     hits = compile_css.cache_info().hits
     convert(html)
     assert compile_css.cache_info().hits > hits
+
+
+def test_font_properties_not_duplicated_in_style():
+    doc = parse(page('p { color: #c00; font-family: Georgia; font-weight: bold; text-align: center;'
+                     ' font-size: 24px; font-style: italic }', '<p>x</p>'))
+    p = doc.find('.//p')
+    assert p.get('style') is None
+    assert p.get('align') == 'center'
+    font = p.find('font')
+    assert (font.get('color'), font.get('face'), font.get('size')) == ('#cc0000', 'Georgia', '5')
+    assert font.find('b/i') is not None
+
+
+def test_style_keeps_what_html_cannot_express():
+    doc = parse(page('div { font-size: 21px } span { font-weight: normal } a { color: #00c }'
+                     ' a.n { text-decoration: none }',
+                     '<div>t</div><p><b><span>n</span></b> <a href="#">u</a> <a class="n" href="#">n</a></p>'))
+    # a size between the <font size> steps
+    assert doc.find('.//div').get('style') == 'font-size:21px'
+    assert doc.find('.//span').get('style') == 'font-weight:normal'
+    # the underline of a link takes the color of the <a>, not of the <font> inside
+    underlined, plain = doc.findall('.//a')
+    assert underlined.get('style').startswith('color:#0000cc')
+    assert plain.get('style') == 'text-decoration:none'
+    assert plain.find('font').get('color') == '#0000cc'

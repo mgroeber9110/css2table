@@ -21,8 +21,12 @@ font size by itself.
 3. Decide per element: flex and grid containers become tables; blocks with a
    background, padding or width become single-cell tables; everything else is
    kept (with an HTML4 tag where needed).
-4. Output fonts and colors as `<font>`, `bgcolor`, `align` etc., and additionally
-   as a `style` attribute for browsers that support CSS1.
+4. Output fonts and colors as `<font>`, `bgcolor`, `align`, `<b>`, `<i>` etc. A
+   `style` attribute only carries what HTML cannot express, so the page does not
+   repeat its formatting: `text-decoration`, `background-color` of non-table
+   elements, `normal` weight or style, pixel font sizes between the seven
+   `<font size>` steps, the color of underlined links, and fonts inside
+   elements that cannot hold a `<font>` (lists, tables, form fields).
 
 | CSS | Table |
 | --- | --- |
@@ -49,6 +53,7 @@ font size by itself.
 | `border` | `border` + `bordercolor` |
 | `background(-color)`, including gradients | `bgcolor` (first color) |
 | `color`, `font-family`, `font-size`, `font-weight` | `<font color face size>`, `<b>`, `<i>` |
+| `font-family` with web fonts (`@font-face`) or modern system fonts | `face` keeps at most two fonts installed on systems around 2001 (Arial, Verdana, Georgia, …); generic families become Arial/Times/Courier |
 | `<picture>` / `srcset` | the `<img>` inside is kept; without `src`, the widest `srcset` image that fits the screen is used |
 | `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
 | `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
