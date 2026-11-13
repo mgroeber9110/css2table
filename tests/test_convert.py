@@ -223,8 +223,22 @@ def test_flex_space_between_uses_spacer():
     cells = doc.findall('.//table/tr/td')
     assert len(cells) == 3
     assert cells[1].get('width') == '100%' and len(cells[1]) == 0
-    assert cells[0].get('valign') == 'middle'
+    assert cells[0].get('valign') is None  # middle is the default
     assert cells[0].get('nowrap') is not None
+
+
+def test_default_attributes_are_omitted():
+    doc = parse(page('.f { display: flex } .b { padding: 4px }',
+                     '<div class="f"><div class="b">a</div><div>b<br>c</div></div>'))
+    assert not doc.xpath('//table[@border="0"]')
+    assert not doc.xpath('//td[@valign="middle"]')
+    # Several cells in a row: valign="top" still matters
+    assert [td.get('valign') for td in doc.find('.//table/tr')][:2] == ['top', 'top']
+    # The stretched padding box (height="100%") keeps its valign
+    assert doc.xpath('//table[@height]/tr/td[@valign="top"]')
+    # A single cell with nothing to make it taller: no free space to align
+    doc = parse(page('.b { padding: 4px; border: 1px solid red }', '<div class="b">a</div>'))
+    assert doc.find('.//td').get('valign') is None
 
 
 def test_flex_center():
