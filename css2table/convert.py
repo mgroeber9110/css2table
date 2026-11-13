@@ -1274,6 +1274,43 @@ def _prune(node):
         parent.remove(el)
 
 
+def _defaults(node):
+    """Drop table attributes that only repeat what browsers do anyway.
+
+    - border="0": a table without border attribute has no border.
+    - valign="middle": the default for table cells.
+    - valign in a row with a single cell: the cell alone sets the row
+      height, so there is no free space to align in. Only when nothing
+      else can make the row taller (height, rowspan).
+    """
+    for table in node.iter('table'):
+        if table.get('border') == '0':
+            del table.attrib['border']
+        rows = [tr for tr in table.iter('tr') if _owner(tr) is table]
+        cells = [td for tr in rows for td in tr if td.tag in ('td', 'th')]
+        fixed = (_has_height(table) or any(_has_height(el) for el in rows + cells)
+                 or any(td.get('rowspan') for td in cells))
+        for tr in rows:
+            row = [td for td in tr if td.tag in ('td', 'th')]
+            for td in row:
+                valign = td.get('valign')
+                if valign is None or tr.get('valign'):
+                    continue
+                if valign == 'middle' or (len(row) == 1 and not fixed
+                                          and valign in ('top', 'bottom')):
+                    del td.attrib['valign']
+
+
+def _owner(el):
+    """The table that a row belongs to (not one nested in its cells)."""
+    for parent in el.iterancestors('table'):
+        return parent
+
+
+def _has_height(el):
+    return el.get('height') is not None or 'height' in (el.get('style') or '')
+
+
 def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
     """Convert HTML text (str or bytes) into HTML 4.01 with a table layout.
 
@@ -1286,6 +1323,7 @@ def convert(html, viewport_width=800, base_url=None, load_stylesheet=None):
         doc.make_links_absolute(base_url, resolve_base_href=True)
     out = Converter(doc, viewport_width, load_stylesheet).build()
     _prune(out.find('body'))
+    _defaults(out)
     _newlines(out)
     result = lxml.html.tostring(out, doctype=DOCTYPE, encoding='unicode', method='html')
     meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
