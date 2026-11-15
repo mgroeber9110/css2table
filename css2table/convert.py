@@ -534,7 +534,8 @@ class Converter:
         # padding: a large padding-top is often room for a fixed header, which
         # the converted page shows in the normal flow
         top, right, bottom, left = (max(0, v) for v in values)
-        side = max(left, right)
+        # Small vertical padding (cards with py-2) still separates stacked items
+        side = max(left, right, min(top, bottom, 8))
         return round((min(top, side) + right + min(bottom, side) + left) / 4)
 
     def border(self, s):
