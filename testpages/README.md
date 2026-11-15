@@ -47,3 +47,8 @@ covered in the repository.
 | `wikipedia/` | German Wikipedia article (Netscape Navigator) | 2026-11-01 | Text page with infobox table |
 | `csstricks/` | CSS-Tricks home page | 2026-11-01 | Card sliders with min-width, code snippets |
 | `thomann/` | Thomann category page (electric guitars) | 2026-11-01 | Shop: auto-fill category grid, Tailwind |
+| `thobipix/` | Retro computing blog (thobipix.de) | 2026-11-15 | Hand-written HTML 4 table layout with `<font>`; must not change |
+| `geos/` | GEOS-InfoBase home page | 2026-11-15 | HTML 4 in quirks mode: `<center>`, `<body link>`, `bgcolor`; must not change |
+| `geos-forum/` | GEOS-InfoBase forum (WoltLab Suite 6) | 2026-11-15 | Board list grid with side columns, `::after` separators, wrapping name lists |
+| `Abendblatt/` | Hamburger Abendblatt home page (saved by the browser after JavaScript) | 2026-11-15 | Tailwind sliders of fixed-width cards, teaser lists |
+| `bahn/` | bahn.de home page (saved by the browser after JavaScript) | 2026-11-15 | Booking form, marketing stage, teaser sliders |

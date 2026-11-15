@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Forum</title>
+<style>
+/* Patterns of a forum software (board list, sidebar boxes, statistics) */
+:root { --dimmed: #71757a; --sidebarBorder: rgba(236, 241, 247, 0) }
+body { font-family: Arial, sans-serif; font-size: 15px; color: #3a3a3d; margin: 0 }
+h1, h2, h3, p, dl, dd, ul { margin: 0; padding: 0 }
+ul { list-style: none }
+.logo img { max-height: 30px; max-width: 100%; width: auto }
+.boardNode { display: grid; grid-template-areas: "icon content lastPosts" "icon stats lastPosts" "icon subBoards lastPosts";
+  grid-template-columns: min-content 1fr 40%; grid-template-rows: max-content max-content 1fr; column-gap: 10px }
+.boardNode__icon { grid-area: icon } .boardNode__content { grid-area: content }
+.boardNode__stats { grid-area: stats; display: flex; font-size: 12px; color: var(--dimmed) }
+.boardNode__subBoards { grid-area: subBoards; display: none }
+.boardNode__lastPosts { grid-area: lastPosts }
+.boardNode__title { display: inline; font-size: 18px; font-weight: 600 }
+.statItem { display: flex } .statItem:not(:first-child) { margin-left: 10px }
+.statItem dt::after { content: ":" } .statItem dd { margin-left: 5px }
+.lastPost { display: grid; grid-template-areas: "avatar title" "avatar meta"; grid-template-columns: min-content 1fr }
+.lastPost__avatar { grid-area: avatar; align-self: center } .lastPost__title { grid-area: title }
+.lastPost__meta { grid-area: meta; font-size: 12px }
+.lastPost__time { white-space: nowrap } .lastPost__time::before { content: " · " }
+.box { background: #f0f0f0; border: 1px solid var(--sidebarBorder); padding: 20px }
+.inlineList { display: flex; flex-wrap: wrap; gap: 5px }
+.inlineList.commaSeparated > li:not(:last-child)::after { content: "," }
+.inlineList.dotSeparated > li:not(:last-child)::after { content: "·"; margin-left: 5px }
+.icon::before { content: "\f07c"; font-family: "Icon Font" }
+</style>
+</head>
+<body>
+<div class="logo"><a href="/"><img src="logo-small.png" width="90" height="66" alt="Forum logo"></a></div>
+<h1>Forum</h1>
+<div class="boardNode">
+  <div class="boardNode__icon"><span class="icon"></span></div>
+  <div class="boardNode__content">
+    <h3 class="boardNode__title"><a href="board-1">General board</a></h3>
+    <div class="boardNode__description">Everything about the main topic.</div>
+  </div>
+  <div class="boardNode__stats">
+    <dl class="statItem"><dt>Threads</dt><dd>1,5k</dd></dl>
+    <dl class="statItem"><dt>Posts</dt><dd>15k</dd></dl>
+  </div>
+  <div class="boardNode__subBoards">Hidden sub boards</div>
+  <div class="boardNode__lastPosts">
+    <div class="lastPost">
+      <div class="lastPost__avatar"><img src="avatar.jpg" width="24" height="24" alt=""></div>
+      <div class="lastPost__title"><a href="thread-1">Meeting of the users in November in a small village</a></div>
+      <div class="lastPost__meta"><span class="lastPost__author">Alice</span><span class="lastPost__time">13 November 2026</span></div>
+    </div>
+  </div>
+</div>
+<section class="box">
+  <h2>Users online</h2>
+  <ul class="inlineList dotSeparated"><li>5 members and 408 guests</li><li>Record: 9 users (8 January 2024)</li></ul>
+  <ul class="inlineList commaSeparated">
+    <li><a href="u1">Alice</a></li><li><a href="u2">Bob Example</a></li><li><a href="u3">Carol Sample</a></li>
+    <li><a href="u4">Dave</a></li><li><a href="u5">Eve Placeholder</a></li>
+  </ul>
+</section>
+</body>
+</html>

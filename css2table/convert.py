@@ -14,7 +14,7 @@ from lxml import etree
 
 from .cascade import Style, StyleResolver
 from .values import (HTML_FONT_SIZES, MATH_FUNCTIONS, color, font_face, html_font_size, length, px, tokens,
-                     split_commas)
+                     split_commas, transparent)
 
 DOCTYPE = ('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" '
            '"http://www.w3.org/TR/html4/loose.dtd">')
@@ -47,7 +47,7 @@ INLINE_TAGS = {'a', 'abbr', 'acronym', 'b', 'big', 'button', 'cite', 'code', 'de
 # Containers whose content can move directly into a table cell
 BOX_MERGE = {'div', 'section', 'article', 'header', 'footer', 'nav', 'main',
              'aside', 'figure', 'hgroup', 'span'}
-CELL_MERGE = BOX_MERGE | {'li'}
+CELL_MERGE = BOX_MERGE | {'li', 'dt', 'dd'}
 
 ALIGN_TAGS = {'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'th'}
 BOLD_TAGS = {'b', 'strong', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'th'}
@@ -55,6 +55,8 @@ ITALIC_TAGS = {'i', 'em', 'cite', 'var', 'dfn', 'address'}
 # No <font> may be inserted into these elements
 NO_FONT = {'table', 'tr', 'tbody', 'thead', 'tfoot', 'ul', 'ol', 'dl', 'select',
            'textarea', 'optgroup', 'option', 'colgroup', 'html'} | VOID
+MARGIN_TAGS = {'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
+ROW_TAGS = {'table', 'tr', 'tbody', 'thead', 'tfoot'}
 NO_TEXT = {'table', 'tr', 'tbody', 'thead', 'tfoot', 'ul', 'ol', 'dl', 'select'}
 
 GLOBAL_ATTRS = {'id', 'title', 'lang', 'dir'}
@@ -76,7 +78,7 @@ TAG_ATTRS = {
     'col': {'span', 'width'}, 'colgroup': {'span', 'width'},
     'ol': {'start', 'type'}, 'ul': {'type'}, 'li': {'value', 'type'},
     'map': {'name'}, 'area': {'shape', 'coords', 'href', 'alt'},
-    'blockquote': {'cite'}, 'q': {'cite'}, 'font': {'face', 'size', 'color'},
+    'blockquote': {'cite'}, 'q': {'cite'},
 }
 INPUT_TYPES = {'text', 'password', 'checkbox', 'radio', 'submit', 'reset',
                'file', 'hidden', 'image', 'button'}
@@ -120,7 +122,8 @@ class Item:
 
 
 def collapse(text):
-    return re.sub(r'\s+', ' ', text)
+    # Not \s: that would also collapse non-breaking spaces
+    return re.sub(r'[ \t\n\r\f]+', ' ', text)
 
 
 def sub(parent, tag, **attrs):
@@ -172,6 +175,16 @@ class Converter:
         self.doc = doc
         self.viewport = viewport_width
         self.styles = StyleResolver(doc, viewport_width, load_stylesheet)
+        # Text alignment that the converted page passes on at the current
+        # position; table cells inherit it in many browsers
+        self.out_align = 'left'
+        self.link_color = color(self.styles.link_color)
+
+    def cell_ctx(self):
+        """What the content of a new table cell starts with: legacy browsers
+        reset the font in tables. Some pass on the alignment and some do not,
+        so inside centered or right-aligned content each cell sets its own."""
+        return dict(DEFAULT_CTX, align='left' if self.out_align == 'left' else None)
 
     def style(self, el):
         return self.styles.style(el)
@@ -196,6 +209,12 @@ class Converter:
         ctx = text_ctx(bs)
         if ctx['color'] != DEFAULT_CTX['color']:
             body.set('text', ctx['color'])
+        if self.link_color:
+            body.set('link', self.link_color)
+            for attr in ('vlink', 'alink'):
+                value = color(src.get(attr))
+                if value:
+                    body.set(attr, value)
         margin = px(bs['margin-left'], bs.font_size)
         if margin is not None and margin != 8:
             m = str(round(margin))
@@ -264,11 +283,13 @@ class Converter:
 
     def emit_children(self, el, out, avail, ctx, pre=False):
         s = self.style(el)
+        self.add_source_text(out, s.pseudo.get('before'), s, pre)
         self.add_source_text(out, el.text, s, pre)
         for child in el:
             if isinstance(child.tag, str):
                 self.emit(child, out, avail, ctx)
             self.add_source_text(out, child.tail, s, pre)
+        self.add_source_text(out, s.pseudo.get('after'), s, pre)
 
     def add_source_text(self, out, text, s, pre=False):
         if not text or (out.tag in NO_TEXT and not text.strip()):
@@ -284,6 +305,7 @@ class Converter:
         if tag in TRANSPARENT or display == 'contents':
             self.emit_children(el, out, avail, ctx)
             return
+        saved, self.out_align = self.out_align, ctx['align']
         if display in LAYOUT_DISPLAYS and tag != 'table':
             node = self.layout(el, s, avail, shrink)
         elif not boxed and display in BLOCK_DISPLAYS and self.needs_box(tag, s):
@@ -292,6 +314,7 @@ class Converter:
             node = self.plain(el, s, avail, ctx)
             if display not in BLOCK_DISPLAYS:
                 self.inline_space(node, s)
+        self.out_align = saved
         out.append(node)
 
     def inline_space(self, node, s):
@@ -320,6 +343,11 @@ class Converter:
             return RENAME[tag]
         if tag == 'span' and s['display'] in BLOCK_DISPLAYS:
             return 'div'
+        if tag in MARGIN_TAGS and s['display'] in BLOCK_DISPLAYS and all(
+                px(s['margin-' + side], s.font_size) == 0 for side in ('top', 'bottom')):
+            return 'div'  # paragraph or heading without the blank lines around it
+        if tag in MARGIN_TAGS and s['display'] in ('inline', 'inline-block'):
+            return 'span'  # e.g. a title next to a badge
         if tag in ('ul', 'ol', 'li') and s['list-style-type'] == 'none':
             return 'div'  # list without bullets
         if tag in HTML4_TAGS:
@@ -383,10 +411,11 @@ class Converter:
                 node.set('width', str(round(width[1])) if width[0] == 'px' else pct(width[1]))
         if tag == 'table' and node.get('cellspacing') is None and s['border-collapse'] == 'collapse':
             node.set('cellspacing', '0')
-        old = DEFAULT_CTX if tag in ('td', 'th') else ctx
+        old = self.cell_ctx() if tag in ('td', 'th') else ctx
         if tag == 'a' and el.get('href'):
-            # Legacy browsers give links their own color: always set it explicitly
-            old = dict(old, color=None)
+            # Legacy browsers give links their own color: set it explicitly
+            # unless it is the link color of the page (<body link>)
+            old = dict(old, color=self.link_color)
         inner, ctx = self.apply_text(node, text_ctx(s), old, extra)
         if tag not in VOID:
             pre = (s['white-space'] or '').startswith('pre')
@@ -414,6 +443,17 @@ class Converter:
             attr = int(node.get('width', ''))
         except ValueError:
             return
+        try:
+            height = int(node.get('height', ''))
+        except ValueError:
+            height = 0
+        max_height = length(s['max-height'], s.font_size)
+        if height and max_height and max_height[0] == 'px' and 0 < max_height[1] < height:
+            # Scale down to max-height and keep the aspect ratio
+            scale = max_height[1] / height
+            attr = round(attr * scale)
+            node.set('width', str(attr))
+            node.set('height', str(round(max_height[1])))
         if attr > avail and s['max-width'] not in (None, 'none'):
             # max-width: 100% shrinks large images to the container
             node.set('width', '100%')
@@ -433,6 +473,10 @@ class Converter:
         tag = node.tag
         css = []
         result = dict(old)
+        if tag in ROW_TAGS:
+            # Cells start with the default font in legacy browsers and set
+            # their own: a font on the table or row would only repeat it
+            new = dict(new, **{k: old[k] for k in ('color', 'face', 'size', 'bold', 'italic')})
         diff = {k for k in new if new[k] != old[k]}
         no_font = tag in NO_FONT
 
@@ -460,6 +504,8 @@ class Converter:
         if 'align' in diff and tag in ALIGN_TAGS:
             node.set('align', new['align'])
             result['align'] = new['align']
+        if tag == 'center':
+            result['align'] = 'center'
         css += extra or []
         if css:
             node.set('style', '; '.join(css))
@@ -467,7 +513,9 @@ class Converter:
             return node, result
 
         inner = node
-        if font:
+        if font and tag == 'font':
+            node.attrib.update(font)  # a <font> of the page carries its own attributes
+        elif font:
             inner = sub(inner, 'font', **font)
         if bold:
             inner = sub(inner, 'b')
@@ -486,12 +534,15 @@ class Converter:
         # padding: a large padding-top is often room for a fixed header, which
         # the converted page shows in the normal flow
         top, right, bottom, left = (max(0, v) for v in values)
-        side = max(left, right)
+        # Small vertical padding (cards with py-2) still separates stacked items
+        side = max(left, right, min(top, bottom, 8))
         return round((min(top, side) + right + min(bottom, side) + left) / 4)
 
     def border(self, s):
         if s['border-style'] in ('none', 'hidden'):
             return 0
+        if s['border-color'] and transparent(s['border-color']):
+            return 0  # an invisible border only keeps the space free
         width = s['border-width']
         named = {'thin': 1, 'medium': 3, 'thick': 5}
         return named.get(width) or round(px(width, s.font_size) or 0)
@@ -549,10 +600,10 @@ class Converter:
         """Block with background/padding/width as a single-cell table."""
         table, td, inner_avail = self.box_table(s, avail, shrink)
         if el.tag in BOX_MERGE:
-            holder, cctx = self.apply_text(td, text_ctx(s), DEFAULT_CTX)
+            holder, cctx = self.apply_text(td, text_ctx(s), self.cell_ctx())
             self.emit_children(el, holder, inner_avail, cctx)
         else:
-            holder, cctx = self.apply_text(td, ctx, DEFAULT_CTX)
+            holder, cctx = self.apply_text(td, ctx, self.cell_ctx())
             self.emit(el, holder, inner_avail, cctx, boxed=True)
         return table
 
@@ -640,7 +691,7 @@ class Converter:
     def fill_cell(self, td, item, container, avail, shrink=False):
         """Write the content of a flex or grid item into a table cell."""
         if item.el is None:
-            holder, _ = self.apply_text(td, text_ctx(container), DEFAULT_CTX)
+            holder, _ = self.apply_text(td, text_ctx(container), self.cell_ctx())
             add_text(holder, transform(collapse(item.text).strip(), item.style))
             return
         el, s = item.el, item.style
@@ -658,10 +709,10 @@ class Converter:
                     inner.set('bordercolor', color(s['border-color']))
                 holder = sub(sub(inner, 'tr'), 'td', valign='top')
                 avail -= 2 * (pad + border)
-            holder, ctx = self.apply_text(holder, text_ctx(s), DEFAULT_CTX)
+            holder, ctx = self.apply_text(holder, text_ctx(s), self.cell_ctx())
             self.emit_children(el, holder, avail, ctx, (s['white-space'] or '').startswith('pre'))
         else:
-            holder, ctx = self.apply_text(td, text_ctx(container), DEFAULT_CTX)
+            holder, ctx = self.apply_text(td, text_ctx(container), self.cell_ctx())
             self.emit(el, holder, avail, ctx, shrink=shrink)
 
     def flex(self, el, s, avail, shrink=False):
@@ -682,6 +733,9 @@ class Converter:
             return root
 
         gap = self.gap(s, 'column-gap', cavail)
+        if s['flex-wrap'] == 'wrap' and all(self.inline_item(i) for i in items):
+            self.inline_flow(table, items, s, cavail, gap)
+            return root
         lines = [items]
         if s['flex-wrap'] in ('wrap', 'wrap-reverse') or self.overflows(items, cavail, gap):
             # Carousels (sliders) are rows wider than the screen that scroll
@@ -700,6 +754,46 @@ class Converter:
                 self.flex_row(row, line, s, cavail, gap)
         return root
 
+    def inline_item(self, item):
+        """Whether a flex item is just text (names, tags, links) without a box."""
+        if item.el is None:
+            return True
+        st = item.style
+        if (self.flex_basis(st)[0] or length(st['width'], st.font_size) or color(st['background-color'])
+                or self.border(st) or st['display'] in LAYOUT_DISPLAYS):
+            return False
+        for child in item.el.iterdescendants():
+            if isinstance(child.tag, str) and self.style(child)['display'] in BLOCK_DISPLAYS | LAYOUT_DISPLAYS:
+                return False
+        return True
+
+    def inline_flow(self, table, items, s, avail, gap):
+        """A wrapping row of text items (lists of names or tags) as running
+        text: the browser wraps it like the original, without guessing widths."""
+        td = sub(sub(table, 'tr'), 'td')
+        holder, ctx = self.apply_text(td, text_ctx(s), self.cell_ctx())
+        saved, self.out_align = self.out_align, ctx['align']
+        previous = None
+        for item in items:
+            if previous is not None:
+                space = gap + self.margin(previous, 'right', avail) + self.margin(item, 'left', avail)
+                add_text(holder, NBSP * max(0, round(space / 4) - 1) + ' ')
+            previous = item
+            if item.el is None:
+                add_text(holder, transform(collapse(item.text).strip(), item.style))
+            elif item.el.tag in CELL_MERGE:
+                inner, ictx = self.apply_text(make('span'), text_ctx(item.style), ctx)
+                self.emit_children(item.el, inner, avail, ictx)
+                if not inner.attrib:  # nothing to set: no extra <span>
+                    add_text(holder, inner.text)
+                    for child in list(inner):
+                        holder.append(child)
+                else:
+                    holder.append(inner)
+            else:
+                self.emit(item.el, holder, avail, ctx)
+        self.out_align = saved
+
     def flex_basis(self, s):
         basis = s['flex-basis'] or 'auto'
         size = None if basis in ('auto', 'content') else length(basis, s.font_size)
@@ -714,11 +808,18 @@ class Converter:
         return size, grow
 
     def item_width(self, item, avail):
-        """Estimated width of a flex item in pixels, or None if unknown.
+        """Estimated width of a flex item in pixels including its horizontal
+        margins, or None if unknown.
 
         Uses width or flex-basis; for short texts (menu links, tags), the
         width is estimated from the number of characters.
         """
+        width = self.content_width(item, avail)
+        if width is None:
+            return None
+        return width + self.margin(item, 'left', avail) + self.margin(item, 'right', avail)
+
+    def content_width(self, item, avail):
         if item.el is None:
             return None
         size = self.flex_basis(item.style)[0]
@@ -866,20 +967,27 @@ class Converter:
 
         valign_default = VALIGN.get(s['align-items'], 'top')
         cells = iter(cells)
-        first = True
+        previous = None
         for is_spacer in pattern:
             if is_spacer:
                 td = sub(tr, 'td')
                 if spacer_width >= 1:
                     td.set('width', pct(spacer_width))
                 continue
-            if gap and not first:
-                # A cell instead of cellspacing, which would also add the gap
-                # above, below and at the edges. Spaces keep it from collapsing
-                # next to a spacer cell with width=100%.
-                sub(tr, 'td', width=str(gap)).text = NBSP * max(1, round(gap / 4))
-            first = False
             item, width, nowrap, grow = next(cells)
+            if previous is not None:
+                # Horizontal margins between items add to the gap; not next
+                # to empty items (icons drawn by CSS, which are left out)
+                margins = 0
+                if self.has_content(previous) and self.has_content(item):
+                    margins = self.margin(previous, 'right', avail) + self.margin(item, 'left', avail)
+                space = round(gap + margins)
+                if space > 0:
+                    # A cell instead of cellspacing, which would also add the gap
+                    # above, below and at the edges. Spaces keep it from collapsing
+                    # next to a spacer cell with width=100%.
+                    sub(tr, 'td', width=str(space)).text = NBSP * max(1, round(space / 4))
+            previous = item
             valign = valign_default
             if item.el is not None and item.style['align-self'] not in ('auto', None):
                 valign = VALIGN.get(item.style['align-self'], 'top')
@@ -891,6 +999,18 @@ class Converter:
             cell_avail = avail * float(width[:-1]) / 100 if width and width.endswith('%') else (
                 float(width) if width else avail)
             self.fill_cell(td, item, s, cell_avail, shrink=not width and not grow)
+
+    def has_content(self, item):
+        return bool(self.text_of(item).strip()) or (
+            item.el is not None and next(item.el.iter(*CONTENT_TAGS), None) is not None)
+
+    @staticmethod
+    def margin(item, side, avail):
+        """A positive horizontal margin of a flex item in pixels (else 0)."""
+        if item.el is None:
+            return 0
+        value = px(item.style['margin-' + side], item.style.font_size, avail)
+        return value if value and 0 < value < avail / 4 else 0
 
     def text_of(self, item):
         if item.el is None:
@@ -955,6 +1075,9 @@ class Converter:
                     covered.setdefault((r + i, c + j), (r, c))
         nrows = max((r + rs for _, r, _, rs, _ in placed), default=0)
         valign_default = VALIGN.get(s['align-items'], 'top')
+        if self.side_columns(start, nrows):
+            self.grid_columns(table, start, ncols, widths, s, cavail, column_gap, valign_default)
+            return root
 
         for r in range(nrows):
             tr = sub(table, 'tr')
@@ -972,6 +1095,8 @@ class Converter:
                     width, est = span_width(widths[c:c + cs], cavail, column_gap)
                     if width:
                         td.set('width', width)
+                    if all(m.el is not None and m.style['white-space'] == 'nowrap' for m in group):
+                        td.set('nowrap', 'nowrap')
                     for i, member in enumerate(group):
                         if i:
                             sub(td, 'br')
@@ -982,6 +1107,50 @@ class Converter:
                     if width:
                         td.set('width', width)
         return root
+
+    @staticmethod
+    def side_columns(start, nrows):
+        """Whether the grid is a few columns side by side: an icon or a box
+        that spans all rows next to items stacked in the other columns
+        (`"icon content" "icon stats"`).
+
+        As table rows, the stacked items would be pulled apart when the
+        spanning box is taller than they are.
+        """
+        cells = list(start.values())
+        return (nrows > 1 and all(cs == 1 for _, _, cs in cells)
+                and any(rs == nrows for _, rs, _ in cells)
+                and all(rs in (1, nrows) for _, rs, _ in cells))
+
+    def grid_columns(self, table, start, ncols, widths, s, cavail, gap, valign):
+        """One row with a cell per column; stacked items go below each other."""
+        tr = sub(table, 'tr')
+        for c in range(ncols):
+            column = [(r, group) for (r, cc), (group, _, _) in sorted(start.items()) if cc == c]
+            td = sub(tr, 'td', valign=valign)
+            width, est = span_width(widths[c:c + 1], cavail, gap)
+            if width:
+                td.set('width', width)
+            if not column:
+                continue
+            first = column[0][1][0]
+            if len(column) == 1 and first.el is not None and first.style['align-self'] not in ('auto', None):
+                td.set('valign', VALIGN.get(first.style['align-self'], 'top'))
+            if len(column) > 1:
+                td.set('valign', 'top')
+            nowrap = len(column) == 1 and all(
+                m.el is not None and m.style['white-space'] == 'nowrap' for m in column[0][1])
+            if nowrap:
+                td.set('nowrap', 'nowrap')
+            for i, (_, group) in enumerate(column):
+                cell = td
+                if len(column) > 1:
+                    inner = sub(td, 'table', width='100%', cellspacing=0, cellpadding=0)
+                    cell = sub(sub(inner, 'tr'), 'td')
+                for j, member in enumerate(group):
+                    if j:
+                        sub(cell, 'br')
+                    self.fill_cell(cell, member, s, est)
 
 
 # -- Grid helpers -------------------------------------------------------------
@@ -1262,15 +1431,17 @@ def _prune(node):
     for el in reversed(list(node.iter(*PRUNABLE))):
         if el.getparent() is None or el.get('bgcolor') or el.get('id') or el.get('name'):
             continue
-        if (''.join(el.itertext()).replace(NBSP, ' ').strip()
-                or any(True for _ in el.iter(*CONTENT_TAGS))):
+        text = ''.join(el.itertext())
+        if text.replace(NBSP, ' ').strip() or any(True for _ in el.iter(*CONTENT_TAGS)):
             continue
         parent, prev = el.getparent(), el.getprevious()
-        if el.tail:
+        # Keep a &nbsp; that the page uses to fill an otherwise empty cell
+        tail = (NBSP if NBSP in text else '') + (el.tail or '')
+        if tail:
             if prev is not None:
-                prev.tail = (prev.tail or '') + el.tail
+                prev.tail = (prev.tail or '') + tail
             else:
-                parent.text = (parent.text or '') + el.tail
+                parent.text = (parent.text or '') + tail
         parent.remove(el)
 
 
@@ -1283,6 +1454,9 @@ def _defaults(node):
       height, so there is no free space to align in. Only when nothing
       else can make the row taller (height, rowspan).
     """
+    for font in list(node.iter('font')):
+        if not font.attrib:  # a <font> of the page whose font is unchanged
+            _unwrap(font)
     for table in node.iter('table'):
         if table.get('border') == '0':
             del table.attrib['border']
@@ -1299,6 +1473,28 @@ def _defaults(node):
                 if valign == 'middle' or (len(row) == 1 and not fixed
                                           and valign in ('top', 'bottom')):
                     del td.attrib['valign']
+
+
+def _unwrap(el):
+    """Replace an element by its content."""
+    parent = el.getparent()
+    index = parent.index(el)
+    if el.text:
+        prev = el.getprevious()
+        if prev is not None:
+            prev.tail = (prev.tail or '') + el.text
+        else:
+            parent.text = (parent.text or '') + el.text
+    children = list(el)
+    for offset, child in enumerate(children):
+        parent.insert(index + offset, child)
+    last = children[-1] if children else el.getprevious()
+    if el.tail:
+        if last is not None:
+            last.tail = (last.tail or '') + el.tail
+        else:
+            parent.text = (parent.text or '') + el.tail
+    parent.remove(el)
 
 
 def _owner(el):

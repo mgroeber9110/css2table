@@ -168,3 +168,50 @@ def test_scroll_rows():
     while category.get('width') != '25%':
         category = category.getparent()
     assert 'Category four' in text(category.getparent())
+
+
+def test_legacy_homepage():
+    """An old page that is already table based must stay as it is."""
+    _, doc = convert_page('legacy-homepage')
+    body = doc.find('body')
+    assert (body.get('bgcolor'), body.get('link'), body.get('vlink')) == ('#ffefd5', '#000000', '#000000')
+    # Links keep the page's link color: no extra color per link
+    assert not any('color' in (a.get('style') or '') or a.find('font[@color]') is not None
+                   for a in doc.iter('a') if a.get('href'))
+    # In quirks mode, cells inside <center> are left-aligned
+    assert cell_with(doc, 'Programs').get('align') == 'left'
+    assert cell_with(doc, 'Two hobbyists').get('align') == 'center'
+    # &nbsp; is kept, also as the only content of a cell
+    assert NBSP + NBSP + ' New background' in ' '.join(body.itertext())
+    assert any(td.text == NBSP for td in doc.iter('td') if td.get('height') == '48')
+    # The page's <font> tags are not repeated: one face per <font>, no nesting
+    assert not any(f.find('font[@face]') is not None for f in doc.iter('font') if f.get('face'))
+    # The h1 inside <font size="-1"> has its own size (30px from CSS)
+    assert doc.find('.//h1/font').get('size') == '6'
+
+
+def test_forum_board():
+    _, doc = convert_page('forum-board')
+    body = ' '.join(text(doc.find('body')).split())
+    # Logo scaled to max-height with the aspect ratio
+    logo = doc.find('.//img')
+    assert (logo.get('width'), logo.get('height')) == ('41', '30')
+    # Separators from ::before / ::after, but not icon font glyphs
+    assert 'Threads: 1,5k' in body and 'Posts: 15k' in body
+    assert 'Alice · 13 November 2026' in body
+    assert '5 members and 408 guests· Record' in body
+    plain = ' '.join(''.join(doc.find('body').itertext()).split())
+    assert 'Alice, Bob Example, Carol Sample, Dave, Eve Placeholder' in plain
+    assert '' not in body and 'Hidden sub boards' not in body
+    # The board is one row: icon, content above stats, last posts
+    title = cell_with(doc, 'General board')
+    row = next(tr for tr in title.iterancestors('tr') if 'Meeting of the users' in text(tr))
+    assert not any(td.get('rowspan') for td in row.iter('td'))
+    # The inline title has no heading margins
+    assert doc.find('.//h3') is None
+    # The invisible box border is left out
+    box = next(t for t in doc.iter('table') if t.get('bgcolor') == '#f0f0f0')
+    assert box.get('border') in (None, '0')
+    # The list of names is running text that the browser wraps
+    names = cell_with(doc, 'Carol Sample')
+    assert 'Alice' in text(names) and 'Eve Placeholder' in text(names)

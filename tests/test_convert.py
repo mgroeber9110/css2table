@@ -2,7 +2,7 @@ import lxml.html
 import pytest
 
 from css2table import convert
-from css2table.cascade import StyleResolver
+from css2table.cascade import StyleResolver, quirks_mode
 from css2table.values import color, font_face, length, media_matches
 
 
@@ -437,3 +437,123 @@ def test_style_keeps_what_html_cannot_express():
     assert underlined.get('style').startswith('color:#0000cc')
     assert plain.get('style') == 'text-decoration:none'
     assert plain.find('font').get('color') == '#0000cc'
+
+
+# -- Pages written in HTML 4 (presentational attributes, quirks mode) ---------
+
+QUIRKS = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">'
+
+
+def test_quirks_mode_detection():
+    assert quirks_mode(lxml.html.document_fromstring(QUIRKS + '<p>x'))
+    assert quirks_mode(lxml.html.document_fromstring('<p>x'))
+    assert not quirks_mode(lxml.html.document_fromstring('<!DOCTYPE html><p>x'))
+    assert not quirks_mode(lxml.html.document_fromstring(
+        '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" '
+        '"http://www.w3.org/TR/html4/loose.dtd"><p>x'))
+
+
+def test_quirks_tables_do_not_inherit_alignment_and_size():
+    body = '<center style="font-size: 20px"><table><tr><td>x</td></tr></table></center>'
+    for doctype, align, size in ((QUIRKS, 'left', '16px'), ('<!DOCTYPE html>', 'center', '20px')):
+        doc = lxml.html.document_fromstring(doctype + page('', body))
+        style = StyleResolver(doc).style(doc.find('.//td'))
+        assert (style['text-align'], style['font-size']) == (align, size)
+
+
+def test_cells_inside_center_set_their_alignment():
+    doc = parse(QUIRKS + '<body><center><table><tr><td>a</td></tr></table></center>')
+    assert doc.find('.//td').get('align') == 'left'
+
+
+def test_body_colors_and_link_colors_are_kept():
+    doc = parse(QUIRKS + '<body bgcolor="#ffefd5" text="#333333" link="#000000" vlink="#000000">'
+                '<p><a href="x">link</a></p>')
+    body = doc.find('body')
+    assert (body.get('bgcolor'), body.get('text'), body.get('link'), body.get('vlink')) == (
+        '#ffefd5', '#333333', '#000000', '#000000')
+    # The link has the color of <body link>: nothing to repeat
+    a = doc.find('.//a')
+    assert a.find('font') is None and 'color' not in (a.get('style') or '')
+
+
+def test_font_tags_of_the_page_are_known_to_the_cascade():
+    doc = parse(QUIRKS + '<body><font face="arial" size="-1"><h1>Title</h1>text</font>')
+    # The page's own <font> is kept once, not wrapped in another one
+    font = doc.find('.//body/font')
+    assert (font.get('face'), font.get('size')) == ('Arial', '2')
+    assert font.find('font') is None
+    # h1 is 2em of the small font (26px), like in the browser
+    assert doc.find('.//h1/font').get('size') == '5'
+
+
+def test_nonbreaking_spaces_are_kept():
+    doc = parse('<table><tr><td bgcolor="red">&nbsp;</td><td>a&nbsp;&nbsp;b</td></tr></table>')
+    first, second = doc.iter('td')
+    assert first.text == '\xa0'  # the cell keeps its background in legacy browsers
+    assert second.text == 'a\xa0\xa0b'
+
+
+# -- Smaller CSS features found on a forum (WoltLab) --------------------------
+
+def test_before_and_after_text():
+    doc = parse(page('dt::after { content: ":" } .t::before { content: " · " }'
+                     ' .icon::before { content: "\\f101" }'
+                     ' .glyph::before { content: "v"; font-family: siteicons }'
+                     ' .deco::before { content: "x"; position: absolute }'
+                     ' abbr::after { content: " (" attr(title) ")" }',
+                     '<dl><dt>Posts</dt><dd>15</dd></dl><span class="t">today</span>'
+                     '<i class="icon"></i><i class="glyph"></i><b class="deco">d</b>'
+                     '<abbr title="HyperText">HTML</abbr>'))
+    body = ' '.join(doc.find('body').itertext())
+    assert 'Posts:' in body and ' · today' in body and 'HTML (HyperText)' in body
+    assert '' not in body and 'v' not in body.split() and 'xd' not in body
+
+
+def test_transparent_border_is_no_border():
+    doc = parse(page('div { border: 1px solid rgba(0, 0, 0, 0); background: #eee; padding: 10px }',
+                     '<div>box</div>'))
+    assert doc.find('.//table').get('border') in (None, '0')
+
+
+def test_image_max_height_keeps_aspect_ratio():
+    doc = parse(page('img { max-height: 30px; width: auto }', '<img src="a.png" width="90" height="66">'))
+    img = doc.find('.//img')
+    assert (img.get('width'), img.get('height')) == ('41', '30')
+
+
+def test_headings_without_margins_become_divs():
+    doc = parse(page('h3 { margin: 0 } h4 { display: inline }', '<h3>A</h3><h2>B</h2><h4>C</h4>'))
+    assert doc.find('.//h3') is None and doc.find('.//h4') is None
+    assert doc.find('.//h2') is not None
+    assert doc.xpath('//div//b[text()="A"]') and doc.xpath('//span/b[text()="C"]')
+
+
+def test_margins_between_flex_items():
+    doc = parse(page('.row { display: flex } .row span + span { margin-left: 12px }',
+                     '<div class="row"><span>one</span><span>two</span></div>'))
+    widths = [td.get('width') for td in doc.iter('td')]
+    assert '12' in widths
+
+
+def test_wrapping_list_of_names_is_running_text():
+    doc = parse(page('ul { display: flex; flex-wrap: wrap; gap: 5px; list-style: none; padding: 0 }'
+                     ' li:not(:last-child)::after { content: "," }',
+                     '<ul>' + ''.join(f'<li><a href="#">User {i}</a></li>' for i in range(8)) + '</ul>'))
+    cells = [td for td in doc.iter('td') if 'User' in ''.join(td.itertext())]
+    assert len(cells) == 1  # one cell; the browser wraps the names
+    assert 'User 0, User 1,' in ' '.join(''.join(cells[0].itertext()).split())
+
+
+def test_grid_with_side_columns_stacks_the_middle_column():
+    doc = parse(page('.node { display: grid; grid-template-areas: "icon title last" "icon stats last";'
+                     ' grid-template-columns: min-content 1fr 40% }'
+                     ' .i { grid-area: icon } .t { grid-area: title } .s { grid-area: stats }'
+                     ' .l { grid-area: last }',
+                     '<div class="node"><div class="i"><img src="i.png" width="20" height="20"></div>'
+                     '<div class="t">Title</div><div class="s">Stats</div>'
+                     '<div class="l">Last post<br>by someone<br>yesterday</div></div>'))
+    outer = doc.find('.//table')
+    rows = [tr for tr in outer.iter('tr') if tr.getparent() is outer or tr.getparent().getparent() is outer]
+    assert len(rows) == 1
+    assert not any(td.get('rowspan') for td in doc.iter('td'))
