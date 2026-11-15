@@ -242,6 +242,15 @@ def color(value):
     return '#%02x%02x%02x' % tuple(round(x * 255) for x in (r, g, b))
 
 
+def transparent(value):
+    """Whether a color value is fully transparent (invisible borders)."""
+    try:
+        c = color3.parse_color(value)
+    except Exception:
+        return False
+    return c is not None and not isinstance(c, str) and c[3] <= 0.01
+
+
 def first_color(value):
     """First color in a background value, including inside a gradient."""
     for t in tokens(value):

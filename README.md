@@ -57,7 +57,22 @@ font size by itself.
 | `<picture>` / `srcset` | the `<img>` inside is kept; without `src`, the widest `srcset` image that fits the screen is used |
 | `calc()`, `min()`, `max()`, `clamp()` | evaluated; with percentages only the percentage part is kept (`calc(50% - 1rem)` → 50%) |
 | `position: fixed` at the top (headers), `position: absolute` | kept in the normal flow |
+| `::before` / `::after` with text (`content: ":"`, `" · "`, `attr()`) | the text; icon font glyphs, empty or absolutely positioned pseudo-elements are left out |
+| horizontal `margin` between flex items | added to the gap cell between them |
+| `flex-wrap: wrap` with plain text items (lists of names, tags) | running text that the browser wraps |
+| grid with an item spanning all rows (`"icon content" "icon stats"`) | one row; the items of the other columns are stacked in their column |
+| `p` / `h1`–`h6` with `margin: 0` | `<div>` (inline headings: `<span>`), so no blank lines appear |
+| `max-height` of images | smaller `width`/`height` with the same aspect ratio |
+| transparent `border-color` | no border |
 | `display: none`, closed `<details>`, off-screen elements (skip links, off-canvas menus, `translate(±100%)`, `scale(0)`), bottom-anchored or full-screen `position: fixed` overlays, `<script>`, `<iframe>`, `<video>`, `<svg>` | dropped |
+
+Pages that are already written in HTML 4 stay as they are: presentational
+attributes (`<font>`, `bgcolor`, `align`, `<body text link vlink>`) take part
+in the cascade, and pages with an old or missing doctype are read in quirks
+mode, where tables do not inherit font size and alignment from outside. The
+link colors of `<body>` are kept, `&nbsp;` is kept, and table cells inside
+centered content set their own alignment, since legacy browsers differ in
+whether cells inherit it.
 
 ## Usage
 
@@ -106,9 +121,10 @@ python tools/testpages.py
 - `flex-wrap` and `auto-fill` rely on estimated widths; without known widths
   everything stays on one line.
 - In grids, `gap` becomes `cellspacing` and therefore also appears at the table edges.
-- Margins between blocks are ignored; `padding` is a single value per box.
+- Margins between blocks are ignored (except zero margins of paragraphs and
+  headings, and margins between flex items); `padding` is a single value per box.
 - `position: absolute`, `transform`, floats of blocks (except as `align`) and
-  pseudo-elements (`::before`) are not reproduced. Whether a positioned element
+  pseudo-elements without text are not reproduced. Whether a positioned element
   is off-screen is a heuristic (large negative offsets, `translate(±100%)`,
   `clip`, `opacity: 0`).
 - Dropdown menus that are hidden only via `:hover` or JavaScript remain visible.

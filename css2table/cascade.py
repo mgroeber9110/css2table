@@ -29,6 +29,13 @@ tfoot { display: table-footer-group }
 tr { display: table-row }
 td, th { display: table-cell }
 body { margin: 8px }
+p { margin-top: 1em; margin-bottom: 1em }
+h1 { margin-top: 0.67em; margin-bottom: 0.67em }
+h2 { margin-top: 0.83em; margin-bottom: 0.83em }
+h3 { margin-top: 1em; margin-bottom: 1em }
+h4 { margin-top: 1.33em; margin-bottom: 1.33em }
+h5 { margin-top: 1.67em; margin-bottom: 1.67em }
+h6 { margin-top: 2.33em; margin-bottom: 2.33em }
 h1 { font-size: 2em; font-weight: bold }
 h2 { font-size: 1.5em; font-weight: bold }
 h3 { font-size: 1.17em; font-weight: bold }
@@ -44,6 +51,104 @@ small { font-size: smaller }
 big { font-size: larger }
 center, th { text-align: center }
 """
+
+# Quirks mode (old doctypes or none): tables do not inherit font and
+# alignment from outside, as in browsers of the time
+QUIRKS_CSS = """
+table { font-size: initial; font-weight: initial; font-style: initial;
+        white-space: initial; text-align: initial }
+"""
+
+QUIRKS_PUBLIC_IDS = (
+    '-//w3c//dtd html 4.0 transitional', '-//w3c//dtd html 4.0 frameset',
+    '-//w3c//dtd html 3', '-//w3c//dtd html 2', '-//w3c//dtd w3 html',
+    '-//w3c//dtd html experimental', '-//w3o//', '-//ietf//', '-//netscape comm. corp.//',
+    '-//microsoft//', '-//softquad', '-//spyglass//', '-//webtechs//', '-//as//',
+    '-//metrius//', "-//o'reilly", '-//sun microsystems', '-//sq//', '-//silmaril//',
+    '-//advasoft', '-//hotmetal', '-//ms//',
+)
+LOOSE_PUBLIC_IDS = ('-//w3c//dtd html 4.01 transitional', '-//w3c//dtd html 4.01 frameset')
+
+# Presentational attributes and the CSS properties they stand for
+ALIGN_HINT_TAGS = {'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'td', 'th', 'tr',
+                   'thead', 'tbody', 'tfoot', 'caption', 'center'}
+BGCOLOR_HINT_TAGS = {'body', 'table', 'tr', 'td', 'th'}
+FONT_SIZE_STEPS = ('10px', '13px', '16px', '18px', '24px', '32px', '48px')
+
+
+def quirks_mode(root):
+    """Whether browsers show the document in quirks mode (see the HTML spec)."""
+    info = root.getroottree().docinfo
+    if not info.doctype or not info.doctype.lower().startswith('<!doctype html'):
+        return True
+    public = (info.public_id or '').lower()
+    if public.startswith(QUIRKS_PUBLIC_IDS):
+        return True
+    return public.startswith(LOOSE_PUBLIC_IDS) and not info.system_url
+
+
+def font_size_hint(value):
+    """<font size>: 1 to 7, or relative to the default size 3."""
+    value = (value or '').strip()
+    try:
+        step = int(value)
+    except ValueError:
+        return None
+    if value[0] in '+-':
+        step += 3
+    return FONT_SIZE_STEPS[min(7, max(1, step)) - 1]
+
+
+def hints(el, link_color):
+    """CSS declarations for the presentational attributes of an element."""
+    tag = el.tag.lower() if isinstance(el.tag, str) else ''
+    out = []
+    if tag == 'font':
+        if el.get('color'):
+            out.append(('color', el.get('color').strip()))
+        if el.get('face'):
+            out.append(('font-family', el.get('face').strip()))
+        size = font_size_hint(el.get('size'))
+        if size:
+            out.append(('font-size', size))
+    elif tag == 'body':
+        if el.get('text'):
+            out.append(('color', el.get('text').strip()))
+    elif tag == 'a' and link_color and el.get('href') is not None:
+        out.append(('color', link_color))
+    if tag in BGCOLOR_HINT_TAGS and el.get('bgcolor'):
+        out.append(('background-color', el.get('bgcolor').strip()))
+    align = (el.get('align') or '').strip().lower()
+    if tag in ALIGN_HINT_TAGS and align in ('left', 'right', 'center', 'justify'):
+        out.append(('text-align', align))
+    if tag in ('td', 'th') and el.get('nowrap') is not None:
+        out.append(('white-space', 'nowrap'))
+    return out
+
+
+# The properties of ::before and ::after that decide whether their text shows
+PSEUDO_PROPERTIES = {'content', 'display', 'position', 'visibility', 'font-size', 'font-family'}
+ICON_FONT_WORDS = ('icon', 'awesome', 'glyph', 'symbol', 'material', 'dashicons')
+
+
+def content_text(value, el):
+    """The text of a `content` value: strings and attr(); None for anything else
+    (images, counters, icon font glyphs)."""
+    text = []
+    for t in tokens(value):
+        if t.type == 'string':
+            text.append(t.value)
+        elif t.type == 'function' and t.lower_name == 'attr':
+            args = [a for a in t.arguments if a.type == 'ident']
+            text.append(el.get(args[0].value, '') if args else '')
+        elif t.type not in ('whitespace', 'comment'):
+            return None
+    text = ''.join(text)
+    # Icon fonts put their glyphs into the private use area
+    if not text.strip() or any('\ue000' <= c <= '\uf8ff' or c >= '\U000f0000' for c in text):
+        return None
+    return text
+
 
 INHERITED = {'color', 'font-family', 'font-size', 'font-weight', 'font-style',
              'text-align', 'text-transform', 'white-space', 'visibility', 'list-style-type'}
@@ -74,6 +179,7 @@ class Style(dict):
         super().__init__(*args, **kwargs)
         self.font_size = 16.0
         self.custom = {}
+        self.pseudo = {}  # text of ::before and ::after
 
     def __missing__(self, key):
         return INITIAL.get(key)
@@ -221,6 +327,11 @@ class StyleResolver:
         self.matcher = cssselect2.Matcher()
         self.computed = {}
         self._add_css(UA_CSS, origin=0)
+        self.quirks = quirks_mode(root)
+        if self.quirks:
+            self._add_css(QUIRKS_CSS, origin=0)
+        body = root.find('body')
+        self.link_color = (body.get('link') or '').strip() or None if body is not None else None
         for el in root.iter('style', 'link'):
             media = el.get('media')
             if media and not media_matches(media, self.viewport):
@@ -257,18 +368,45 @@ class StyleResolver:
         for w in wrapper.iter_subtree():
             el = w.etree_element
             candidates = []
+            pseudo_candidates = {}
             for specificity, order, pseudo, (origin, decls) in self.matcher.match(w):
-                if pseudo is None:
-                    for i, (name, value, important) in enumerate(decls):
-                        candidates.append(((important, origin, specificity, order, i), name, value))
+                target = candidates if pseudo is None else pseudo_candidates.setdefault(pseudo, [])
+                for i, (name, value, important) in enumerate(decls):
+                    target.append(((important, origin, specificity, order, i), name, value))
+            # Presentational attributes come before all author rules
+            for i, (name, value) in enumerate(hints(el, self.link_color)):
+                candidates.append(((False, 1, (-1, 0, 0), 0, i), name, value))
             if el.get('style'):
                 for i, (name, value, important) in enumerate(declarations(el.get('style'))):
                     candidates.append(((important, 2, (0, 0, 0), 0, i), name, value))
             candidates.sort(key=lambda c: c[0])
             parent = el.getparent()
-            self.computed[el] = self._resolve(candidates, self.computed.get(parent))
+            style = self.computed[el] = self._resolve(candidates, self.computed.get(parent))
+            for pseudo, decls in pseudo_candidates.items():
+                text = self._pseudo_text(decls, style, el)
+                if text:
+                    style.pseudo[pseudo] = text
             if parent is None:
                 ROOT_FONT_SIZE.set(self.computed[el].font_size)
+
+    def _pseudo_text(self, candidates, style, el):
+        """The text that ::before or ::after adds, if it is shown in the flow."""
+        declared = {}
+        for _, name, value in sorted(candidates, key=lambda c: c[0]):
+            if 'var(' in value:
+                value = substitute(value, style.custom)
+            declared[name] = value.strip()
+        if (declared.get('display') == 'none' or declared.get('visibility') == 'hidden'
+                or declared.get('position') in ('absolute', 'fixed')
+                or declared.get('font-size') in ('0', '0px')):
+            return None
+        text = content_text(declared.get('content', ''), el)
+        family = declared.get('font-family', '').lower()
+        # Icon fonts that draw letters: `content: "v"` with their own font
+        if text and family and (any(w in family for w in ICON_FONT_WORDS)
+                                or (len(text.strip()) == 1 and text.strip().isalnum())):
+            return None
+        return text
 
     def _resolve(self, candidates, parent):
         style = Style()
@@ -328,8 +466,11 @@ class StyleResolver:
             elif name != 'font-size':
                 style[name] = value
         size = declared.get('font-size')
-        style.font_size = font_size(size, parent_size) if size and size.lower() not in (
-            'inherit', 'unset', 'initial') else parent_size
+        if size and size.lower() == 'initial':
+            style.font_size = 16.0
+        else:
+            style.font_size = font_size(size, parent_size) if size and size.lower() not in (
+                'inherit', 'unset') else parent_size
         style['font-size'] = '%gpx' % style.font_size
         return style
 
@@ -352,9 +493,15 @@ def _compile_rules(rules, origin, base, viewport, out):
             except cssselect2.SelectorError:
                 continue
             decls = declarations(rule.content)
+            pseudo_decls = None
             for selector in selectors:
                 if decls and not selector.pseudo_element:
                     out.append(('selector', selector, (origin, decls)))
+                elif selector.pseudo_element in ('before', 'after'):
+                    if pseudo_decls is None:
+                        pseudo_decls = [d for d in decls if d[0] in PSEUDO_PROPERTIES]
+                    if pseudo_decls:
+                        out.append(('selector', selector, (origin, pseudo_decls)))
         elif rule.type == 'at-rule':
             keyword = rule.lower_at_keyword
             if rule.content is not None and (
